@@ -4,13 +4,13 @@
 
 (defn negated?? [x]
   (and (vector? x) (= (first x) :not)))
-
+ass
 (defn state [table x]
   (if (negated?? x)
     (not (table (second x)))
     (table x)))
 
-(defn set-state [table x p]
+(defn assoc-state [table x p]
   (if (negated?? x)
     (assoc table (second x) (not p))
     (assoc table x p)))
@@ -27,12 +27,12 @@
       (false? (state table bi))
         (assoc table (get-var bi) :inconsistent)
       (= (state table bi) :inconsistent) table  
-      :else (set-state table bi true))
+      :else (assoc-state table bi true))
     table))
 
 (defn consistency-table [rule rule-set]
   (let [[a b] rule
-	truth-table (reduce #(set-state %1 %2 true) {} rule)]
+	truth-table (reduce #(assoc-state %1 %2 true) {} rule)]
     (loop [t truth-table
 	   rules rule-set
 	   unapplied-rules []]
