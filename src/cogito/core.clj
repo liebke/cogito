@@ -4,7 +4,7 @@
 
 (defn negated?? [x]
   (and (vector? x) (= (first x) :not)))
-ass
+
 (defn state [table x]
   (if (negated?? x)
     (not (table (second x)))
