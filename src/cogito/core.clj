@@ -20,31 +20,28 @@
     (second x)
     x))
 
+(defn assoc-if-consistent [table [ai bi :as r]]
+  (if (true? (state table ai))
+     (cond
+      (true? (state table bi)) table
+      (false? (state table bi))
+        (assoc table (get-var bi) :inconsistent)
+      (= (state table bi) :inconsistent) table  
+      :else (set-state table bi true))
+    table))
+
 (defn consistency-table [rule rule-set]
-  (let [[_ a b] rule
-	truth-table (reduce #(set-state %1 %2 true) {} (rest rule))
-	f (fn [table [_ ai bi :as r]]
-	    (if (= rule r)
-	      table
-	      (if (true? (state table ai))
-	         (cond
-		  (true? (state table bi))
-		    table
-		  (false? (state table bi))
-		    (assoc table (get-var bi) :inconsistent)
-		  (= (state table bi) :inconsistent)
-		    table  
-		  :else
-		    (set-state table bi true))
-		 table)))]
+  (let [[a b] rule
+	truth-table (reduce #(set-state %1 %2 true) {} rule)]
     (loop [t truth-table
 	   rules rule-set
 	   unapplied-rules []]
       (if (seq rules)
-	(let [new-t (f t (first rules))]
+	(let [r (first rules)
+	      new-t (if (= rule r) t (assoc-if-consistent t r))]
 	  (if (> (count new-t) (count t))
 	    (recur new-t (concat unapplied-rules (rest rules)) unapplied-rules)
-	    (recur new-t (rest rules) (conj unapplied-rules (first rules)))))
+	    (recur new-t (rest rules) (conj unapplied-rules r))))
 	t))))
 
 (defn consistent? [rule rule-set]
@@ -63,35 +60,28 @@
   (apply merge (for [i (range (count partitions))]
 		 (zipmap (get partitions i) (repeat (count (get partitions i)) i)))))
 
-(def omega [[:-> :b :f]
-	    [:-> :p :b]
-	    [:-> :p [:not :f]]
-	    [:-> :b :w]
-	    [:-> :f :a]])
-
-(def omega3 #{[:-> :b :f]
-	     [:-> :p :b]
-	     [:-> :p [:not :f]]
-	     [:-> :b :w]
-	     [:-> :f :a]})
+(def rules #{[:b :f]
+	     [:p :b]
+	     [:p [:not :f]]
+	     [:b :w]
+	     [:f :a]})
 
 ;; examples
-(consistency-table [:-> :b :f] omega3)
-(consistent? [:-> :b :f] omega3)
+(consistency-table [:b :f] rules)
+(consistent? [:b :f] rules)
 ;; b ^ f ^ p => b ^ p => [not f] ^ b => w ^ f => a
 ;; t   t                           t    t   t    t
 
-(consistency-table [:-> :p :b] omega3)
-(consistent? [:-> :p :b] omega3)
+(consistency-table [:p :b] rules)
+(consistent? [:p :b] rules)
 ;; p ^ b ^ b => f ^ p => [not f] ^ b => w ^ f => a
 ;; t   t   t    t   t      x       t    t   t    t
 
-(consistency-table [:-> :p [:not :f]] omega3)
-(consistent? [:-> :p [:not :f]] omega3)
+(consistency-table [:p [:not :f]] rules)
+(consistent? [:p [:not :f]] rules)
 
 
-(partition-consistent omega3)
+(partition-consistent rules)
 
-(apply-priorities (partition-consistent omega3))
+(apply-priorities (partition-consistent rules))
 
-(clojure.set/difference omega3 (partition-consistent omega3))
