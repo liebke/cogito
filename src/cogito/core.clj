@@ -2,21 +2,21 @@
 
 (defn bool? [x] (= (type x) java.lang.Boolean))
 
-(defn negate? [x]
+(defn negated?? [x]
   (and (vector? x) (= (first x) :not)))
 
 (defn state [table x]
-  (if (negate? x)
+  (if (negated?? x)
     (not (table (second x)))
     (table x)))
 
 (defn set-state [table x p]
-  (if (negate? x)
+  (if (negated?? x)
     (assoc table (second x) (not p))
     (assoc table x p)))
 
 (defn get-var [x]
-  (if (negate? x)
+  (if (negated?? x)
     (second x)
     x))
 
