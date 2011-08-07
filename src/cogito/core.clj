@@ -34,6 +34,14 @@ Queries are made by submitting competing hypotheses, the one that is the least s
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
+(defn antecedent
+  "Returns the antecedent of the given rule."
+  ([rule] (first rule)))
+
+(defn consequent
+  "Returns the consequent of the given rule."
+  ([rule] (second rule)))
+
 (defn bool?
   "Determines if the logical variable is associated with a boolean value, where logical variables are represented by Clojure keywords, e.g. :x, :y."
   ([x]
@@ -103,10 +111,21 @@ New values are only added to the model if the antecedent, 'a',  is already bound
        model)))
 
 (defn append-rule
-  "Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set."
-  ([rule rule-set]
-     (append-rule rule rule-set (reduce #(assoc-state %1 %2 true) {} rule)))
-  ([rule rule-set model]
+  "
+Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set.
+
+This method:
+
+1. Sets the logical variables associated with the  antecedent and consequent of the rule to true in the model.
+2. Walks through the rest of rules in a non-deterministic order and applying update-bindings to the model for each.
+   * For each rule whose antecedent is already true in the model, its consequent is also set to true if it is currently nil, :inconsistent if its set to false, otherwise it's not changed.
+   * Rules that could not be applied because their antecedents were false in the model are placed back at the end of the list of rules, possibly to be applied again once other bindings are in place.
+   * Rules that don't change the state of the model because their antecendents and consequents were already true are not applied again.
+   * When the model is updated after a new rule is applied all unapplied rules are attempted again.
+"
+  ([rule-set rule]
+     (append-rule rule-set rule (reduce #(assoc-state %1 %2 true) {} rule)))
+  ([rule-set rule model]
      (let [[a b] rule]
        (loop [m model
 	      rules rule-set
@@ -114,17 +133,21 @@ New values are only added to the model if the antecedent, 'a',  is already bound
 	 (if (seq rules)
 	   (let [r (first rules)
 		 new-m (if (= rule r) m (update-bindings m r))]
-	     (if (> (count new-m) (count m))
-	       (recur new-m (concat unapplied-rules (rest rules)) unapplied-rules)
-	       (recur new-m (rest rules) (conj unapplied-rules r))))
+	     (cond
+	      (not= new-m m) 
+  	        (recur new-m (concat unapplied-rules (rest rules)) [])
+	      (true? (state new-m (antecedent r))) 
+	        (recur new-m (rest rules) unapplied-rules)
+	      :else
+	        (recur new-m (rest rules) (conj unapplied-rules r))))
 	   m)))))
 
 (defn tolerate?
   "Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well"
-  ([rule rule-set]
-     (not ((set (vals (append-rule rule rule-set))) :inconsistent)))
-  ([rule rule-set model]
-     (not ((set (vals (append-rule rule rule-set model))) :inconsistent))))
+  ([rule-set rule]
+     (not ((set (vals (append-rule rule-set rule))) :inconsistent)))
+  ([rule-set rule model]
+     (not ((set (vals (append-rule rule-set rule model))) :inconsistent))))
 
 (defn partition-by-consistency
   "
@@ -139,7 +162,7 @@ Each group forms a sub-theory, where earlier groups are more general and later g
 See *Figure 2 Procedure for testing consistency* in Goldszmidt and Pearl.
 "
   ([rule-set]
-     (let [f (fn [rule-set] (set (filter #(tolerate? % rule-set) rule-set)))]
+     (let [f (fn [rule-set] (set (filter #(tolerate? rule-set %) rule-set)))]
        (loop [parts [] rules rule-set]
 	 (if (seq rules)
 	   (let [new-part (f rules)]
@@ -204,7 +227,7 @@ Z+-order algorithm
      (let [_Omega-r (apply merge
 			   (map (fn [r]
 				  {r (filter (fn [model]
-					       (tolerate? r _Delta-star model))
+					       (tolerate? _Delta-star r model))
 					     (filter-models (generate-all-models _Delta-star)
 							     (reduce #(assoc-state %1 %2 true)
 								     {} r)))})
@@ -250,16 +273,16 @@ Z+-order algorithm
 
 
 ;; examples
-(append-rule [:b :f] rule-set)
-(tolerate? [:b :f] rule-set)
+(append-rule rule-set [:b :f])
+(tolerate? rule-set [:b :f])
 
 
-(append-rule [:p :b] rule-set)
-(tolerate? [:p :b] rule-set)
+(append-rule rule-set [:p :b])
+(tolerate? rule-set [:p :b])
 
 
-(append-rule [:p [:not :f]] rule-set)
-(tolerate? [:p [:not :f]] rule-set)
+(append-rule rule-set [:p [:not :f]])
+(tolerate? rule-set [:p [:not :f]])
 
 
 (partition-by-consistency rule-set)
