@@ -1,4 +1,5 @@
-(ns cogito.core)
+(ns cogito.core
+  (:require [clojure.contrib.combinatorics :as comb]))
 
 (defn bool? [x] (= (type x) java.lang.Boolean))
 
@@ -20,45 +21,113 @@
     (second x)
     x))
 
-(defn assoc-if-consistent [table [ai bi :as r]]
-  (if (true? (state table ai))
-     (cond
-      (true? (state table bi)) table
-      (false? (state table bi))
-        (assoc table (get-var bi) :inconsistent)
-      (= (state table bi) :inconsistent) table  
-      :else (assoc-state table bi true))
-    table))
+(defn assoc-if-tolerates
+  "Updates model to include new rule. One or more truth-values in the model will have a value of :inconsistent, if the new rule is inconsistent  with the current model."
+  ([model [ai bi :as rule]]
+     (if (true? (state model ai))
+       (cond
+	(true? (state model bi)) model
+	(false? (state model bi))
+          (assoc model (get-var bi) :inconsistent)
+	(= (state model bi) :inconsistent) model  
+	:else (assoc-state model bi true))
+       model)))
 
-(defn consistency-table [rule rule-set]
-  (let [[a b] rule
-	truth-table (reduce #(assoc-state %1 %2 true) {} rule)]
-    (loop [t truth-table
-	   rules rule-set
-	   unapplied-rules []]
-      (if (seq rules)
-	(let [r (first rules)
-	      new-t (if (= rule r) t (assoc-if-consistent t r))]
-	  (if (> (count new-t) (count t))
-	    (recur new-t (concat unapplied-rules (rest rules)) unapplied-rules)
-	    (recur new-t (rest rules) (conj unapplied-rules r))))
-	t))))
+(defn append-rule
+  "Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set."
+  ([rule rule-set]
+     (append-rule rule rule-set (reduce #(assoc-state %1 %2 true) {} rule)))
+  ([rule rule-set truth-table]
+     (let [[a b] rule]
+       (loop [t truth-table
+	      rules rule-set
+	      unapplied-rules []]
+	 (if (seq rules)
+	   (let [r (first rules)
+		 new-t (if (= rule r) t (assoc-if-tolerates t r))]
+	     (if (> (count new-t) (count t))
+	       (recur new-t (concat unapplied-rules (rest rules)) unapplied-rules)
+	       (recur new-t (rest rules) (conj unapplied-rules r))))
+	   t)))))
 
-(defn consistent? [rule rule-set]
-  (not ((set (vals (consistency-table rule rule-set))) :inconsistent)))
+(defn tolerate?
+  "Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well"
+  ([rule rule-set]
+     (not ((set (vals (append-rule rule rule-set))) :inconsistent)))
+  ([rule rule-set model]
+     (not ((set (vals (append-rule rule rule-set model))) :inconsistent))))
 
-(defn partition-consistent [rule-set]
-  (let [f (fn [rule-set] (set (filter #(consistent? % rule-set) rule-set)))]
-    (loop [parts [] rules rule-set]
-     (if (seq rules)
-       (let [new-part (f rules)]
-	 (recur (conj parts new-part)
-		(apply clojure.set/difference rule-set new-part parts)))
-       parts))))
+(defn partition-consistent
+  "Partitions a set of rules into an orderd set of groups, where the rules in each group are tolerated by all the rules in its group as well as all later groups. If no rule is consistent with all other rules, then the rule-set is inconsistent. Each group forms a sub-theory, where earlier groups are more general and later groups are more specific."
+  ([rule-set]
+     (let [f (fn [rule-set] (set (filter #(tolerate? % rule-set) rule-set)))]
+       (loop [parts [] rules rule-set]
+	 (if (seq rules)
+	   (let [new-part (f rules)]
+	     (recur (conj parts new-part)
+		    (apply clojure.set/difference rule-set new-part parts)))
+	   parts)))))
 
 (defn apply-priorities [partitions]
   (apply merge (for [i (range (count partitions))]
 		 (zipmap (get partitions i) (repeat (count (get partitions i)) i)))))
+
+(defn extract-vars [rule-set]
+  (set (mapcat (fn [r] (map get-var r)) rule-set)))
+
+(defn generate-all-models
+  "Generates all models possible for a given rule-set, even inconsistent models."
+  ([rule-set]
+     (let [vars (extract-vars rule-set)
+	   truth-vals (comb/selections [true false] (count vars))]
+       (map #(zipmap vars %) truth-vals))))
+
+(defn entails?
+  "Determines if a set of truth-conditions are entailed by a given model."
+  ([model truth-condition]
+     (= truth-condition (select-keys model (keys truth-condition)))))
+
+(defn filter-models
+  "Filters a set of models so that only those consistent with the given truth-condition are returned."
+  ([models truth-condition]
+     (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))
+
+(defn z-plus-order
+  " antecedent => consequent
+Z^+-order algorithm:
+* Partition rules into ordered groups, where the rules in each successive group do not conflict with the rules in later groups.
+* Assign Z(r) scores to each rule in the first group equal to their individual delta values.
+* For each rule in the next group, find all the models where its antecedent is true and that are not in conflict with any other rule in the group.
+** From these models select models that conflict with any of rules in the first group and calculate their Z(r) score.
+** Choose the score from the model with the maximum value and add 1 to the value, and do the same for each other model.
+** Now choose the score from the model with the minimum score and add the delta value associated with the rule to determine the rule's Z(r) score.
+* Take the rule with the lowest Z(r) score and add it to the first group.
+* Repeat the procedure for each rule in the current group, and then move to the next group.
+
+"
+  ([rz-plus _Delta-star]
+     (let [_Omega-r (apply merge
+			   (map (fn [r]
+				  {r (filter (fn [model]
+					       (tolerate? r _Delta-star model))
+					     (filter-models (generate-all-models _Delta-star)
+							     (reduce #(assoc-state %1 %2 true)
+								     {} r)))})
+				_Delta-star))]
+       (apply merge
+	      (map (fn [[r-star omega-r]]
+		     {r-star (mapcat (fn [model]
+				       (reduce (fn [out rz-rule]
+						 (if (entails? model (zipmap rz-rule [true false]))
+						   (conj out rz-rule)
+						   out))
+					       [] rz-plus))
+				     omega-r)})
+		   _Omega-r)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Examples
 
 (def rules #{[:b :f]
 	     [:p :b]
@@ -66,22 +135,31 @@
 	     [:b :w]
 	     [:f :a]})
 
+(def deltas (zipmap rules [1 1 1 1 1]))
+
+(def parts (partition-consistent rules))
+
+(def z-ordered-rules (z-plus-order (first parts) (second parts)))
+
+
 ;; examples
-(consistency-table [:b :f] rules)
-(consistent? [:b :f] rules)
-;; b ^ f ^ p => b ^ p => [not f] ^ b => w ^ f => a
-;; t   t                           t    t   t    t
+(append-rule [:b :f] rules)
+(tolerate? [:b :f] rules)
 
-(consistency-table [:p :b] rules)
-(consistent? [:p :b] rules)
-;; p ^ b ^ b => f ^ p => [not f] ^ b => w ^ f => a
-;; t   t   t    t   t      x       t    t   t    t
 
-(consistency-table [:p [:not :f]] rules)
-(consistent? [:p [:not :f]] rules)
+(append-rule [:p :b] rules)
+(tolerate? [:p :b] rules)
+
+
+(append-rule [:p [:not :f]] rules)
+(tolerate? [:p [:not :f]] rules)
 
 
 (partition-consistent rules)
 
 (apply-priorities (partition-consistent rules))
+
+
+
+
 
