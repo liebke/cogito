@@ -2558,9 +2558,9 @@ $(document).ready(function() {
 </td><td class="codes" /><pre class="brush: clojure">(defn append-rule
   ([rule rule-set]
      (append-rule rule rule-set (reduce #(assoc-state %1 %2 true) {} rule)))
-  ([rule rule-set truth-table]
+  ([rule rule-set model]
      (let [[a b] rule]
-       (loop [t truth-table
+       (loop [t model
 	      rules rule-set
 	      unapplied-rules []]
 	 (if (seq rules)
@@ -2599,16 +2599,30 @@ $(document).ready(function() {
      (= truth-condition (select-keys model (keys truth-condition)))))</pre></tr><tr><td class="docs"><p>Filters a set of models so that only those consistent with the given truth-condition are returned.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn filter-models
   ([models truth-condition]
-     (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))</pre></tr><tr><td class="docs"><p> antecedent => consequent
-Z^+-order algorithm:
-* Partition rules into ordered groups, where the rules in each successive group do not conflict with the rules in later groups.
-* Assign Z(r) scores to each rule in the first group equal to their individual delta values.
-* For each rule in the next group, find all the models where its antecedent is true and that are not in conflict with any other rule in the group.
-** From these models select models that conflict with any of rules in the first group and calculate their Z(r) score.
-** Choose the score from the model with the maximum value and add 1 to the value, and do the same for each other model.
-** Now choose the score from the model with the minimum score and add the delta value associated with the rule to determine the rule's Z(r) score.
-* Take the rule with the lowest Z(r) score and add it to the first group.
-* Repeat the procedure for each rule in the current group, and then move to the next group.</p>
+     (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))</pre></tr><tr><td class="docs"><h1>Z^+-order algorithm:</h1>
+
+<ol>
+<li>Partition rules into ordered groups, where the rules in each successive group do not conflict with the rules in later groups.</li>
+<li>Assign Z(r) scores to each rule in the first group equal to their individual delta values.</li>
+<li>For each rule in the next group, find all the models where its antecedent is true and that are not in conflict with any other rule in the group.
+<ul><li>From these models select models that conflict with any of rules in the first group and calculate their Z(r) score.</li>
+<li>Choose the score from the model with the maximum value and add 1 to the value, and do the same for each other model.</li>
+<li>Now choose the score from the model with the minimum score and add the delta value associated with the rule to determine the rule's Z(r) score.</li></ul></li>
+<li>Take the rule with the lowest Z(r) score and add it to the first group.</li>
+<li>Repeat the procedure for each rule in the current group, and then move to the next group.</li>
+</ol>
+
+<h1>Example</h1>
+
+<p> (def rules #{[:b :f]
+          [:p :b]
+          [:p [:not :f]]
+          [:b :w]
+          [:f :a]})</p>
+
+<p> (def parts (partition-consistent rules))</p>
+
+<p> (def z-ordered-rules (z-plus-order (first parts) (second parts)))</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn z-plus-order
   ([rz-plus _Delta-star]
      (let [_Omega-r (apply merge

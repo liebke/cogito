@@ -37,9 +37,9 @@
   "Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set."
   ([rule rule-set]
      (append-rule rule rule-set (reduce #(assoc-state %1 %2 true) {} rule)))
-  ([rule rule-set truth-table]
+  ([rule rule-set model]
      (let [[a b] rule]
-       (loop [t truth-table
+       (loop [t model
 	      rules rule-set
 	      unapplied-rules []]
 	 (if (seq rules)
@@ -93,16 +93,28 @@
      (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))
 
 (defn z-plus-order
-  " antecedent => consequent
-Z^+-order algorithm:
-* Partition rules into ordered groups, where the rules in each successive group do not conflict with the rules in later groups.
-* Assign Z(r) scores to each rule in the first group equal to their individual delta values.
-* For each rule in the next group, find all the models where its antecedent is true and that are not in conflict with any other rule in the group.
-** From these models select models that conflict with any of rules in the first group and calculate their Z(r) score.
-** Choose the score from the model with the maximum value and add 1 to the value, and do the same for each other model.
-** Now choose the score from the model with the minimum score and add the delta value associated with the rule to determine the rule's Z(r) score.
-* Take the rule with the lowest Z(r) score and add it to the first group.
-* Repeat the procedure for each rule in the current group, and then move to the next group.
+  " 
+# Z^+-order algorithm:
+1. Partition rules into ordered groups, where the rules in each successive group do not conflict with the rules in later groups.
+2. Assign Z(r) scores to each rule in the first group equal to their individual delta values.
+3. For each rule in the next group, find all the models where its antecedent is true and that are not in conflict with any other rule in the group.
+  * From these models select models that conflict with any of rules in the first group and calculate their Z(r) score.
+  * Choose the score from the model with the maximum value and add 1 to the value, and do the same for each other model.
+  * Now choose the score from the model with the minimum score and add the delta value associated with the rule to determine the rule's Z(r) score.
+4. Take the rule with the lowest Z(r) score and add it to the first group.
+5. Repeat the procedure for each rule in the current group, and then move to the next group.
+
+# Example
+
+ (def rules #{[:b :f]
+ 	      [:p :b]
+	      [:p [:not :f]]
+	      [:b :w]
+	      [:f :a]})
+
+ (def parts (partition-consistent rules))
+
+ (def z-ordered-rules (z-plus-order (first parts) (second parts)))
 
 "
   ([rz-plus _Delta-star]
