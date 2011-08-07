@@ -5,7 +5,7 @@ Cogito
 
 *Cogito* is a Clojure implementation of **System-Z+**, a probabilistic reasoner described in [*\"Qualitative probabilities for default reasoning, belief revision, and causal modeling\"*](ftp://ftp.cs.ucla.edu/pub/stat_ser/R161-L.pdf) by Moises Goldszmidt and Judea Pearl.
 
-The basic idea is that you create a rule map, where keys are pairs of antecedents and consequents, each associated with an integer value, delta, that determines the strength of the connection between the antecedent and consequent.
+The basic idea is that you create a rule map, where keys are pairs of antecedents and consequents, each associated with an integer value, delta, that determines the strength of the connection between the pair
 
     {[:b :f] 1
      [:p :b] 1
@@ -31,6 +31,8 @@ The difference between the delta value and the score associated with each rule i
 
 Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.
 
+Functions
+=========
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
@@ -71,19 +73,6 @@ Queries are made by submitting competing hypotheses, the one that is the least s
        (not (model (second x)))
        (model x))))
 
-(defn assoc-state
-  "Associates the truth-value, p, with the logical variable x in the given model.
-
-**Examples**
-
-    (assoc-state {} :a true) ;=> {:a true}
-    (assoc-state {} [:not :b] true) ;=> {:b false}
-"
-  ([model x p]
-     (if (negated? x)
-       (assoc model (second x) (not p))
-       (assoc model x p))))
-
 (defn get-var
   "Returns the logical variable's name.
 
@@ -94,6 +83,31 @@ Queries are made by submitting competing hypotheses, the one that is the least s
 "
   ([x]
      (if (negated? x) (second x) x)))
+
+(defmulti assoc-state
+    "Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.
+
+**Examples**
+
+    (assoc-state {} :a true) ;=> {:a true}
+    (assoc-state {} [:not :b] true) ;=> {:b false}
+
+    (assoc-state {} [:a :b] [true false]) ;=> {:a true, :b false}
+"
+  (fn [model term p]
+    (coll? p)))
+
+(defmethod assoc-state false
+  ([model term p]
+     (assoc model (get-var term)
+	    (if (negated? term) (not p) p))))
+
+
+(defmethod assoc-state true
+  ([model rule [x y]]
+     (-> {}
+	 (assoc-state (antecedent rule) x)
+	 (assoc-state (consequent rule) y))))
 
 (defn update-bindings
   "
@@ -124,7 +138,7 @@ This method:
    * When the model is updated after a new rule is applied all unapplied rules are attempted again.
 "
   ([rule-set rule]
-     (append-rule rule-set rule (reduce #(assoc-state %1 %2 true) {} rule)))
+     (append-rule rule-set rule (assoc-state {} rule [true true])))
   ([rule-set rule model]
      (let [[a b] rule]
        (loop [m model
@@ -220,7 +234,12 @@ Z+-order algorithm
 
     (def parts (partition-by-consistency rules))
 
-    (def z-ordered-rules (z-plus-order (first parts) (second parts)))
+    ;;=> [#{[:b :f] [:b :w] [:f :a]} #{[:p :b] [:p [:not :f]]}]
+
+    (def z-ordered-rules (z-plus-order (first parts)
+                                       (second parts)))
+
+    ;;=> {[:p :b] ([:b :f]), [:p [:not :f]] ([:b :f])}
 
 "
   ([rz-plus _Delta-star]
@@ -229,14 +248,13 @@ Z+-order algorithm
 				  {r (filter (fn [model]
 					       (tolerate? _Delta-star r model))
 					     (filter-models (generate-all-models _Delta-star)
-							     (reduce #(assoc-state %1 %2 true)
-								     {} r)))})
+							     (assoc-state {} r [true true])))})
 				_Delta-star))]
        (apply merge
 	      (map (fn [[r-star omega-r]]
 		     {r-star (mapcat (fn [model]
 				       (reduce (fn [out rz-rule]
-						 (if (entails? model (zipmap rz-rule [true false]))
+						 (if (entails? model (assoc-state {} rz-rule [true false]))
 						   (conj out rz-rule)
 						   out))
 					       [] rz-plus))
