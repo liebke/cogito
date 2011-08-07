@@ -9,17 +9,17 @@
 		[:f :a]})
 
 (deftest append-rule-test
-  (is (append-rule [:b :f] ex-rules)
+  (is (append-rule ex-rules [:b :f])
       {:a true, :w true, :f true, :b true})
-  (is (append-rule [:p :b] ex-rules)
+  (is (append-rule ex-rules [:p :b])
       {:w true, :f :inconsistent, :b true, :p true})
-  (is (append-rule [:p [:not :f]] ex-rules)
+  (is (append-rule ex-rules [:p [:not :f]])
       {:w true, :b true, :f :inconsistent, :p true}))
 
 (deftest tolerate?-test
-  (is (true? (tolerate? [:b :f] ex-rules)))
-  (is (false? (tolerate? [:p :b] ex-rules)))
-  (is (false? (tolerate? [:p [:not :f]] ex-rules))))
+  (is (true? (tolerate? ex-rules [:b :f])))
+  (is (false? (tolerate? ex-rules [:p :b])))
+  (is (false? (tolerate? ex-rules [:p [:not :f]]))))
 
 (def partitions (partition-by-consistency ex-rules))
 
