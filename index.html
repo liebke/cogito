@@ -2560,7 +2560,11 @@ $(document).ready(function() {
 
 <p>Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.</p>
 </td><td class="codes" /><pre class="brush: clojure">(ns cogito.core
-  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><p>Determines if the logical variable is associated with a boolean value, where logical variables are represented by Clojure keywords, e.g. :x, :y.</p>
+  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><p>Returns the antecedent of the given rule.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn antecedent
+  ([rule] (first rule)))</pre></tr><tr><td class="docs"><p>Returns the consequent of the given rule.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn consequent
+  ([rule] (second rule)))</pre></tr><tr><td class="docs"><p>Determines if the logical variable is associated with a boolean value, where logical variables are represented by Clojure keywords, e.g. :x, :y.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn bool?
   ([x]
      (= (type x) java.lang.Boolean)))</pre></tr><tr><td class="docs"><p>Determines if the variable has been negated.</p>
@@ -2614,10 +2618,21 @@ $(document).ready(function() {
 	(nil? (state model b)) (assoc-state model b true)
 	:else model)
        model)))</pre></tr><tr><td class="docs"><p>Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set.</p>
+
+<p>This method:</p>
+
+<ol>
+<li>Sets the logical variables associated with the  antecedent and consequent of the rule to true in the model.</li>
+<li>Walks through the rest of rules in a non-deterministic order and applying update-bindings to the model for each.
+<ul><li>For each rule whose antecedent is already true in the model, its consequent is also set to true if it is currently nil, :inconsistent if its set to false, otherwise it's not changed.</li>
+<li>Rules that could not be applied because their antecedents were false in the model are placed back at the end of the list of rules, possibly to be applied again once other bindings are in place.</li>
+<li>Rules that don't change the state of the model because their antecendents and consequents were already true are not applied again.</li>
+<li>When the model is updated after a new rule is applied all unapplied rules are attempted again.</li></ul></li>
+</ol>
 </td><td class="codes" /><pre class="brush: clojure">(defn append-rule
-  ([rule rule-set]
-     (append-rule rule rule-set (reduce #(assoc-state %1 %2 true) {} rule)))
-  ([rule rule-set model]
+  ([rule-set rule]
+     (append-rule rule-set rule (reduce #(assoc-state %1 %2 true) {} rule)))
+  ([rule-set rule model]
      (let [[a b] rule]
        (loop [m model
 	      rules rule-set
@@ -2625,15 +2640,19 @@ $(document).ready(function() {
 	 (if (seq rules)
 	   (let [r (first rules)
 		 new-m (if (= rule r) m (update-bindings m r))]
-	     (if (&gt; (count new-m) (count m))
-	       (recur new-m (concat unapplied-rules (rest rules)) unapplied-rules)
-	       (recur new-m (rest rules) (conj unapplied-rules r))))
+	     (cond
+	      (not= new-m m) 
+  	        (recur new-m (concat unapplied-rules (rest rules)) [])
+	      (true? (state new-m (antecedent r))) 
+	        (recur new-m (rest rules) unapplied-rules)
+	      :else
+	        (recur new-m (rest rules) (conj unapplied-rules r))))
 	   m)))))</pre></tr><tr><td class="docs"><p>Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn tolerate?
-  ([rule rule-set]
-     (not ((set (vals (append-rule rule rule-set))) :inconsistent)))
-  ([rule rule-set model]
-     (not ((set (vals (append-rule rule rule-set model))) :inconsistent))))</pre></tr><tr><td class="docs"><p>Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.</p>
+  ([rule-set rule]
+     (not ((set (vals (append-rule rule-set rule))) :inconsistent)))
+  ([rule-set rule model]
+     (not ((set (vals (append-rule rule-set rule model))) :inconsistent))))</pre></tr><tr><td class="docs"><p>Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.</p>
 
 <p>If the rule-set cannot be partitioned such, then it is inconsistent and nil will be returned.</p>
 
@@ -2644,7 +2663,7 @@ $(document).ready(function() {
 <p>See <em>Figure 2 Procedure for testing consistency</em> in Goldszmidt and Pearl.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn partition-by-consistency
   ([rule-set]
-     (let [f (fn [rule-set] (set (filter #(tolerate? % rule-set) rule-set)))]
+     (let [f (fn [rule-set] (set (filter #(tolerate? rule-set %) rule-set)))]
        (loop [parts [] rules rule-set]
 	 (if (seq rules)
 	   (let [new-part (f rules)]
@@ -2700,7 +2719,7 @@ $(document).ready(function() {
      (let [_Omega-r (apply merge
 			   (map (fn [r]
 				  {r (filter (fn [model]
-					       (tolerate? r _Delta-star model))
+					       (tolerate? _Delta-star r model))
 					     (filter-models (generate-all-models _Delta-star)
 							     (reduce #(assoc-state %1 %2 true)
 								     {} r)))})
@@ -2733,12 +2752,12 @@ $(document).ready(function() {
 </td><td class="codes" /><pre class="brush: clojure">(def deltas (zipmap rule-set [1 1 1 1 1]))</pre></tr><tr><td class="docs">
 </td><td class="codes" /><pre class="brush: clojure">(def parts (partition-by-consistency rule-set))</pre></tr><tr><td class="docs">
 </td><td class="codes" /><pre class="brush: clojure">(def z-ordered-rules (z-plus-order (first parts) (second parts)))</pre></tr><tr><td class="docs"><p>examples</p>
-</td><td class="codes" /><pre class="brush: clojure">(append-rule [:b :f] rule-set)
-(tolerate? [:b :f] rule-set)</pre></tr><tr><td class="docs">
-</td><td class="codes" /><pre class="brush: clojure">(append-rule [:p :b] rule-set)
-(tolerate? [:p :b] rule-set)</pre></tr><tr><td class="docs">
-</td><td class="codes" /><pre class="brush: clojure">(append-rule [:p [:not :f]] rule-set)
-(tolerate? [:p [:not :f]] rule-set)</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(append-rule rule-set [:b :f])
+(tolerate? rule-set [:b :f])</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(append-rule rule-set [:p :b])
+(tolerate? rule-set [:p :b])</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(append-rule rule-set [:p [:not :f]])
+(tolerate? rule-set [:p [:not :f]])</pre></tr><tr><td class="docs">
 </td><td class="codes" /><pre class="brush: clojure">(partition-by-consistency rule-set)</pre></tr><tr><td class="docs">
 </td><td class="codes" /><pre class="brush: clojure">(apply-priorities (partition-by-consistency rule-set))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
        SyntaxHighlighter.all()</script></body></html>
