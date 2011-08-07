@@ -6,7 +6,7 @@ Cogito
 Documentation
 =============
 
-[Marginalia](https://github.com/fogus/marginalia) documentation is available at <http://liebke.github.com/cogito>.
+[Marginalia](https://github.com/fogus/marginalia)-generated documentation is available at <http://liebke.github.com/cogito>.
 
 
 Build It
