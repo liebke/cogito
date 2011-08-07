@@ -27,10 +27,6 @@
   (is partitions
       [#{[:b :f] [:b :w] [:f :a]} #{[:p :b] [:p [:not :f]]}]))
 
-(deftest priorities-test
-  (is (apply-priorities partitions)
-      {[:p :b] 1, [:p [:not :f]] 1, [:f :a] 0, [:b :w] 0, [:b :f] 0}))
-
 (deftest z-plus-order-test
   (is (apply z-plus-order partitions)
       {[:p :b] [[:b :f]], [:p [:not :f]] [[:b :f]]}))
