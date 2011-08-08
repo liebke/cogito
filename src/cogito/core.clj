@@ -328,13 +328,15 @@ Returns a query result, that should be evaluated by score-query, given a z-order
                    (if ((set (vals (update-bindings model rule))) :inconsistent)
                      (assoc v rule (z-ordered-rules-map rule)) v))
                  {} (keys z-ordered-rules-map)))
-	  (filter-models (generate-all-models-for-vars (clojure.set/union (set (keys query-map))
-							      (extract-vars (keys z-ordered-rules-map))))
-			 query-map))))
+          (filter-models (generate-all-models-for-vars (clojure.set/union (set (keys query-map))
+                                                              (extract-vars (keys z-ordered-rules-map))))
+                         query-map))))
 
 (defn score-query
   "
 Returns a score associated with a query-result returned from the output of the query function.
+
+Queries are performed by submitting queries for multiple hypotheses, and then selecting the hypothesis with the lowest (i.e. least surprising) score.
 
 **Examples**
 
@@ -360,10 +362,11 @@ Returns a score associated with a query-result returned from the output of the q
 
 "
   ([query-result]
-     (apply min (if-let [final-scores (seq (map #(apply max (if-let [scores (vals %)] scores [0]))
-						query-result))]
-		  final-scores
-		  [0]))))
+     (apply min
+            (if-let [scores (seq (map #(apply max (if-let [x (vals %)] x [0]))
+                                                query-result))]
+                  scores
+                  [0]))))
 
 
        
