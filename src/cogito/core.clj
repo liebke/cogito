@@ -44,11 +44,6 @@ Functions
   "Returns the consequent of the given rule."
   ([rule] (second rule)))
 
-(defn bool?
-  "Determines if the logical variable is associated with a boolean value, where logical variables are represented by Clojure keywords, e.g. :x, :y."
-  ([x]
-     (= (type x) java.lang.Boolean)))
-
 (defn negated?
   "Determines if the variable has been negated.
 
@@ -100,14 +95,14 @@ Functions
 (defmethod assoc-state false
   ([model term p]
      (assoc model (get-var term)
-	    (if (negated? term) (not p) p))))
+            (if (negated? term) (not p) p))))
 
 
 (defmethod assoc-state true
   ([model rule [x y]]
      (-> {}
-	 (assoc-state (antecedent rule) x)
-	 (assoc-state (consequent rule) y))))
+         (assoc-state (antecedent rule) x)
+         (assoc-state (consequent rule) y))))
 
 (defn update-bindings
   "
@@ -119,9 +114,9 @@ New values are only added to the model if the antecedent, 'a',  is already bound
   ([model [a b :as rule]]
      (if (true? (state model a))
        (cond
-	(false? (state model b)) (assoc model (get-var b) :inconsistent)
-	(nil? (state model b)) (assoc-state model b true)
-	:else model)
+        (false? (state model b)) (assoc model (get-var b) :inconsistent)
+        (nil? (state model b)) (assoc-state model b true)
+        :else model)
        model)))
 
 (defn append-rule
@@ -142,19 +137,18 @@ This method:
   ([rule-set rule model]
      (let [[a b] rule]
        (loop [m model
-	      rules rule-set
-	      unapplied-rules []]
-	 (if (seq rules)
-	   (let [r (first rules)
-		 new-m (if (= rule r) m (update-bindings m r))]
-	     (cond
-	      (not= new-m m) 
-  	        (recur new-m (concat unapplied-rules (rest rules)) [])
-	      (true? (state new-m (antecedent r))) 
-	        (recur new-m (rest rules) unapplied-rules)
-	      :else
-	        (recur new-m (rest rules) (conj unapplied-rules r))))
-	   m)))))
+              rules rule-set
+              unbound-rules []]
+         (if-let [[r & rs] (seq rules)]
+           (let [new-m (if (= rule r) m (update-bindings m r))]
+             (cond
+              (not= new-m m) 
+                (recur new-m (concat unbound-rules rs) [])
+              (true? (state new-m (antecedent r))) 
+                (recur new-m rs unbound-rules)
+              :else
+                (recur new-m rs (conj unbound-rules r))))
+           m)))))
 
 (defn tolerate?
   "Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well"
@@ -178,25 +172,30 @@ See *Figure 2 Procedure for testing consistency* in Goldszmidt and Pearl.
   ([rule-set]
      (let [f (fn [rule-set] (set (filter #(tolerate? rule-set %) rule-set)))]
        (loop [parts [] rules rule-set]
-	 (if (seq rules)
-	   (let [new-part (f rules)]
-	     (if (seq new-part)
-	       (recur (conj parts new-part)
-		      (apply clojure.set/difference rule-set new-part parts))
-	       nil))
-	   parts)))))
+         (if (seq rules)
+           (let [new-part (f rules)]
+             (if (seq new-part)
+               (recur (conj parts new-part)
+                      (apply clojure.set/difference rule-set new-part parts))
+               nil))
+           parts)))))
 
 (defn extract-vars
   "Extracts logical variable names from a rule set."
   ([rule-set]
      (set (mapcat (fn [r] (map get-var r)) rule-set))))
 
-(defn generate-all-models
+(defn generate-all-models-for-vars
+  "Generates all models possible for a given set of logical variables, even inconsistent models."
+  ([vars]
+     (let [truth-vals (comb/selections [true false] (count vars))]
+       (map #(zipmap vars %) truth-vals))))
+
+(defn generate-all-models-for-ruleset
   "Generates all models possible for a given rule-set, even inconsistent models."
   ([rule-set]
-     (let [vars (extract-vars rule-set)
-	   truth-vals (comb/selections [true false] (count vars))]
-       (map #(zipmap vars %) truth-vals))))
+     (let [vars (extract-vars rule-set)]
+       (generate-all-models-for-vars vars))))
 
 (defn entails?
   "Determines if a set of truth-conditions are entailed by a given model."
@@ -227,10 +226,10 @@ Z+-order algorithm
 **Example**
 
     (def rules #{[:b :f]
- 	         [:p :b]
-	         [:p [:not :f]]
-	         [:b :w]
-	         [:f :a]})
+                 [:p :b]
+                 [:p [:not :f]]
+                 [:b :w]
+                 [:f :a]})
 
     (def parts (partition-by-consistency rules))
 
@@ -244,21 +243,127 @@ Z+-order algorithm
 "
   ([rz-plus _Delta-star]
      (let [_Omega-r (apply merge
-			   (map (fn [r]
-				  {r (filter (fn [model]
-					       (tolerate? _Delta-star r model))
-					     (filter-models (generate-all-models _Delta-star)
-							     (assoc-state {} r [true true])))})
-				_Delta-star))]
+                           (map (fn [r]
+                                  {r (filter (fn [model]
+                                               (tolerate? _Delta-star r model))
+                                             (filter-models (generate-all-models-for-ruleset _Delta-star)
+                                                             (assoc-state {} r [true true])))})
+                                _Delta-star))]
        (apply merge
-	      (map (fn [[r-star omega-r]]
-		     {r-star (mapcat (fn [model]
-				       (reduce (fn [out rz-rule]
-						 (if (entails? model (assoc-state {} rz-rule [true false]))
-						   (conj out rz-rule)
-						   out))
-					       [] rz-plus))
-				     omega-r)})
-		   _Omega-r)))))
+              (map (fn [[r-star omega-r]]
+                     {r-star (mapcat (fn [model]
+                                       (reduce (fn [out rz-rule]
+                                                 (if (entails? model (assoc-state {} rz-rule [true false]))
+                                                   (conj out rz-rule)
+                                                   out))
+                                               [] rz-plus))
+                                     omega-r)})
+                   _Omega-r)))))
 
 
+(defn apply-scores
+  "
+Updates the rules-map with scores from the output of the z-plus-order function.
+
+**Examples**
+
+    (def rules-map {[:b :f] 1
+                    [:p :b] 1
+                    [:p [:not :f]] 1
+                    [:b :w] 1
+                    [:f :a] 1})
+
+    (def parts (partition-by-consistency (set (keys rules-map))))
+
+    (def z-ordered-rules (z-plus-order (first parts)
+                                       (second parts)))
+
+    (apply-scores rules-map z-ordered-rules)
+"
+  ([rules-map z-ordered-rules]
+     (apply merge rules-map
+            (map (fn [[r m]]
+                   {r (+ (apply max (map (fn [rz] (rules-map rz)) m))
+                         (rules-map r)
+                         1)})
+                 z-ordered-rules))))
+
+(defn query
+  "
+Returns a query result, that should be evaluated by score-query, given a z-ordered rule map and a query-map.
+
+**Examples**
+
+    (def rules-map {[:b :f] 1
+                    [:p :b] 3
+                    [:p [:not :f]] 3
+                    [:b :w] 1
+                    [:f :a] 1})
+
+    (query rules-map {:p true, :b true, :f true}) ;;=> score = 3
+    (query rules-map {:p true, :b true, :f false}) ;;=> score = 1
+    ;; penguins ^ birds -> fly
+
+    (query rules-map {:b true, :p true}) ;;=> score = 1
+    (query rules-map {:b true, :p false}) ;;=> score = 0
+    ;; birds -> penguins
+
+    (query rules-map {:r true, :b true, :f true}) ;;=> score = 0?
+    (query rules-map {:r true, :b true, :f false}) ;;=> score = 0?
+    ;; undecided
+
+    (query rules-map {:b true, :a true}) ;;=> score = 0
+    (query rules-map {:b true, :a false}) ;;=> score = 1
+    ;; birds -> airborn
+
+    (query rules-map {:p true, :w true}) ;;=> score = 1
+    (query rules-map {:p true, :w false}) ;;=> score = 1
+    ;; undecided
+
+          
+"
+  ([z-ordered-rules-map query-map]
+     (map (fn [model]
+         (reduce (fn [v rule]
+                   (if ((set (vals (update-bindings model rule))) :inconsistent)
+                     (assoc v rule (z-ordered-rules-map rule)) v))
+                 {} (keys z-ordered-rules-map)))
+	  (filter-models (generate-all-models-for-vars (clojure.set/union (set (keys query-map))
+							      (extract-vars (keys z-ordered-rules-map))))
+			 query-map))))
+
+(defn score-query
+  "
+Returns a score associated with a query-result returned from the output of the query function.
+
+**Examples**
+
+    (score-query (query rules-map {:p true, :b true, :f true})) ;;=> score = 3 ;
+    (score-query (query rules-map {:p true, :b true, :f false})) ;;=> score = 1 ;
+    ;; penguins ^ birds -> fly
+
+    (score-query (query rules-map {:b true, :p true})) ;;=> score = 1 ;
+    (score-query (query rules-map {:b true, :p false})) ;;=> score = 0 ;
+    ;; birds -> penguins
+
+    (score-query (query rules-map {:r true, :b true, :f true})) ;;=> score = 0 ;
+    (score-query (query rules-map {:r true, :b true, :f false})) ;;=> score = 1 ;
+    ;; red ^ birds -> fly
+
+    (score-query (query rules-map {:b true, :a true})) ;;=> score = 0 ;
+    (score-query (query rules-map {:b true, :a false})) ;;=> score = 1 ;
+    ;; birds -> airborn
+
+    (score-query (query rules-map {:p true, :w true})) ;;=> score = 1 ;
+    (score-query (query rules-map {:p true, :w false})) ;;=> score = 1 ;
+    ;; undecided
+
+"
+  ([query-result]
+     (apply min (if-let [final-scores (seq (map #(apply max (if-let [scores (vals %)] scores [0]))
+						query-result))]
+		  final-scores
+		  [0]))))
+
+
+       
