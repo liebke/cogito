@@ -306,11 +306,11 @@ Returns a query result, that should be evaluated by score-query, given a z-order
 
     (query rules-map {:b true, :p true}) ;;=> score = 1
     (query rules-map {:b true, :p false}) ;;=> score = 0
-    ;; birds -> penguins
+    ;; birds -> not penguins
 
-    (query rules-map {:r true, :b true, :f true}) ;;=> score = 0?
-    (query rules-map {:r true, :b true, :f false}) ;;=> score = 0?
-    ;; undecided
+    (query rules-map {:r true, :b true, :f true}) ;;=> score = 0
+    (query rules-map {:r true, :b true, :f false}) ;;=> score = 1
+    ;; red ^ bird -> fly
 
     (query rules-map {:b true, :a true}) ;;=> score = 0
     (query rules-map {:b true, :a false}) ;;=> score = 1
@@ -346,7 +346,7 @@ Queries are performed by submitting queries for multiple hypotheses, and then se
 
     (score-query (query rules-map {:b true, :p true})) ;;=> score = 1 ;
     (score-query (query rules-map {:b true, :p false})) ;;=> score = 0 ;
-    ;; birds -> penguins
+    ;; birds -> not penguins
 
     (score-query (query rules-map {:r true, :b true, :f true})) ;;=> score = 0 ;
     (score-query (query rules-map {:r true, :b true, :f false})) ;;=> score = 1 ;
