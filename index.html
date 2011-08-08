@@ -2787,11 +2787,11 @@ $(document).ready(function() {
 
 (query rules-map {:b true, :p true}) ;;=&gt; score = 1
 (query rules-map {:b true, :p false}) ;;=&gt; score = 0
-;; birds -&gt; penguins
+;; birds -&gt; not penguins
 
-(query rules-map {:r true, :b true, :f true}) ;;=&gt; score = 0?
-(query rules-map {:r true, :b true, :f false}) ;;=&gt; score = 0?
-;; undecided
+(query rules-map {:r true, :b true, :f true}) ;;=&gt; score = 0
+(query rules-map {:r true, :b true, :f false}) ;;=&gt; score = 1
+;; red ^ bird -&gt; fly
 
 (query rules-map {:b true, :a true}) ;;=&gt; score = 0
 (query rules-map {:b true, :a false}) ;;=&gt; score = 1
@@ -2822,7 +2822,7 @@ $(document).ready(function() {
 
 (score-query (query rules-map {:b true, :p true})) ;;=&gt; score = 1 ;
 (score-query (query rules-map {:b true, :p false})) ;;=&gt; score = 0 ;
-;; birds -&gt; penguins
+;; birds -&gt; not penguins
 
 (score-query (query rules-map {:r true, :b true, :f true})) ;;=&gt; score = 0 ;
 (score-query (query rules-map {:r true, :b true, :f false})) ;;=&gt; score = 1 ;
