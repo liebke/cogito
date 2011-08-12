@@ -2529,7 +2529,7 @@ $(document).ready(function() {
 </script><title>cogito -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name">cogito</h1><h2 class="project-version">1.0.0-SNAPSHOT</h2><br /><p><em>Cogito</em> is a Clojure implementation of <strong>System-Z+</strong>, a probabilistic reasoner described in <a href="ftp://ftp.cs.ucla.edu/pub/stat_ser/R161-L.pdf"><em>"Qualitative probabilities for default reasoning, belief revision, and causal modeling"</em></a> by Moises Goldszmidt and Judea Pearl.</p>
 </div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.2.1</td></tr></table></div><div class="dependencies"><h3>dev dependencies</h3><table><tr><td class="dep-name">swank-clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.4.0-SNAPSHOT</td></tr><tr><td class="dep-name">lein-marginalia</td><td class="dotted"><hr /></td><td class="dep-version">0.6.0</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#cogito.core">cogito.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#cogito.core" name="cogito.core"><h1 class="project-name">cogito.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><h1>Cogito</h1>
 
-<p><em>Cogito</em> is a Clojure implementation of <strong>System-Z+</strong>, a probabilistic reasoner described in <a href="ftp://ftp.cs.ucla.edu/pub/stat_ser/R161-L.pdf"><em>"Qualitative probabilities for default reasoning, belief revision, and causal modeling"</em></a> by Moises Goldszmidt and Judea Pearl.</p>
+<p><em>Cogito</em> is a Clojure implementation of <strong>System-Z+</strong>, a qualitative-probabilistic reasoner described in <a href="ftp://ftp.cs.ucla.edu/pub/stat_ser/R161-L.pdf"><em>"Qualitative probabilities for default reasoning, belief revision, and causal modeling"</em></a> by Moises Goldszmidt and Judea Pearl.</p>
 
 <p>The basic idea is that you create a rule map, where keys are pairs of antecedents and consequents, each associated with an integer value, delta, that determines the strength of the connection between the pair</p>
 
@@ -2560,8 +2560,7 @@ $(document).ready(function() {
 
 <p>Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.</p>
 
-<p><hr />
-<strong>Example</strong></p>
+<h1>Example</h1>
 
 <p>The following example takes the above rules-map, compiles it, and runs several queries (each compare two competing hypotheses), which returns a map that associates a "surprise" score with each hypothesis, the lowest score wins.</p>
 
