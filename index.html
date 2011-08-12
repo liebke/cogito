@@ -2559,14 +2559,16 @@ $(document).ready(function() {
 <p>The difference between the delta value and the score associated with each rule is that delta only represents the strength between the given antecedent and consequent, whereas the score takes all the other rules into consideration.</p>
 
 <p>Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.</p>
-
-<h1>Functions</h1>
 </td><td class="codes" /><pre class="brush: clojure">(ns cogito.core
-  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><p>Returns the antecedent of the given rule.</p>
+  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><h1>Internal Functions</h1>
+</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
+Returns the antecedent of the given rule.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn antecedent
-  ([rule] (first rule)))</pre></tr><tr><td class="docs"><p>Returns the consequent of the given rule.</p>
+  ([rule] (first rule)))</pre></tr><tr><td class="docs"><p><hr />
+Returns the consequent of the given rule.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn consequent
-  ([rule] (second rule)))</pre></tr><tr><td class="docs"><p>Determines if the variable has been negated.</p>
+  ([rule] (second rule)))</pre></tr><tr><td class="docs"><p><hr />
+Determines if the variable has been negated.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2575,7 +2577,8 @@ $(document).ready(function() {
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn negated?
   ([x]
-     (and (vector? x) (= (first x) :not))))</pre></tr><tr><td class="docs"><p>Returns the state of the logical variable in the model, where a model consists of a map of logical variables and their associated truth values.</p>
+     (and (vector? x) (= (first x) :not))))</pre></tr><tr><td class="docs"><p><hr />
+Returns the state of the logical variable in the model, where a model consists of a map of logical variables and their associated truth values.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2586,7 +2589,8 @@ $(document).ready(function() {
   ([model x]
      (if (negated? x)
        (not (model (second x)))
-       (model x))))</pre></tr><tr><td class="docs"><p>Returns the logical variable's name.</p>
+       (model x))))</pre></tr><tr><td class="docs"><p><hr />
+Returns the logical variable's name.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2595,7 +2599,8 @@ $(document).ready(function() {
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn get-var
   ([x]
-     (if (negated? x) (second x) x)))</pre></tr><tr><td class="docs"><p>Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.</p>
+     (if (negated? x) (second x) x)))</pre></tr><tr><td class="docs"><p><hr />
+Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2615,7 +2620,8 @@ $(document).ready(function() {
   ([model rule [x y]]
      (-&gt; {}
          (assoc-state (antecedent rule) x)
-         (assoc-state (consequent rule) y))))</pre></tr><tr><td class="docs"><p>Updates model with new bindings based on the given rule. One or more bindings in the model will have a value of :inconsistent, if the new rule is inconsistent with the current model.</p>
+         (assoc-state (consequent rule) y))))</pre></tr><tr><td class="docs"><p><hr />
+Updates model with new bindings based on the given rule. One or more bindings in the model will have a value of :inconsistent, if the new rule is inconsistent with the current model.</p>
 
 <p>New values are only added to the model if the antecedent, 'a',  is already bound to true, then the value of 'b' is set to true if isn't bound yet, set to :inconsistent if it is already bound to false, otherwise it is left as is.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn update-bindings
@@ -2625,7 +2631,8 @@ $(document).ready(function() {
         (false? (state model b)) (assoc model (get-var b) :inconsistent)
         (nil? (state model b)) (assoc-state model b true)
         :else model)
-       model)))</pre></tr><tr><td class="docs"><p>Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set.</p>
+       model)))</pre></tr><tr><td class="docs"><p><hr />
+Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set.</p>
 
 <p>This method:</p>
 
@@ -2654,12 +2661,14 @@ $(document).ready(function() {
                 (recur new-m rs unbound-rules)
               :else
                 (recur new-m rs (conj unbound-rules r))))
-           m)))))</pre></tr><tr><td class="docs"><p>Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well</p>
+           m)))))</pre></tr><tr><td class="docs"><p><hr />
+Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn tolerate?
   ([rule-set rule]
      (not ((set (vals (append-rule rule-set rule))) :inconsistent)))
   ([rule-set rule model]
-     (not ((set (vals (append-rule rule-set rule model))) :inconsistent))))</pre></tr><tr><td class="docs"><p>Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.</p>
+     (not ((set (vals (append-rule rule-set rule model))) :inconsistent))))</pre></tr><tr><td class="docs"><p><hr />
+Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.</p>
 
 <p>If the rule-set cannot be partitioned such, then it is inconsistent and nil will be returned.</p>
 
@@ -2678,21 +2687,26 @@ $(document).ready(function() {
                (recur (conj parts new-part)
                       (apply clojure.set/difference rule-set new-part parts))
                nil))
-           parts)))))</pre></tr><tr><td class="docs"><p>Extracts logical variable names from a rule set.</p>
+           parts)))))</pre></tr><tr><td class="docs"><p><hr />
+Extracts logical variable names from a rule set.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn extract-vars
   ([rule-set]
-     (set (mapcat (fn [r] (map get-var r)) rule-set))))</pre></tr><tr><td class="docs"><p>Generates all models possible for a given set of logical variables, even inconsistent models.</p>
+     (set (mapcat (fn [r] (map get-var r)) rule-set))))</pre></tr><tr><td class="docs"><p><hr />
+Generates all models possible for a given set of logical variables, even inconsistent models.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-vars
   ([vars]
      (let [truth-vals (comb/selections [true false] (count vars))]
-       (map #(zipmap vars %) truth-vals))))</pre></tr><tr><td class="docs"><p>Generates all models possible for a given rule-set, even inconsistent models.</p>
+       (map #(zipmap vars %) truth-vals))))</pre></tr><tr><td class="docs"><p><hr />
+Generates all models possible for a given rule-set, even inconsistent models.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-ruleset
   ([rule-set]
      (let [vars (extract-vars rule-set)]
-       (generate-all-models-for-vars vars))))</pre></tr><tr><td class="docs"><p>Determines if a set of truth-conditions are entailed by a given model.</p>
+       (generate-all-models-for-vars vars))))</pre></tr><tr><td class="docs"><p><hr />
+Determines if a set of truth-conditions are entailed by a given model.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn entails?
   ([model truth-condition]
-     (= truth-condition (select-keys model (keys truth-condition)))))</pre></tr><tr><td class="docs"><p>Filters a set of models so that only those consistent with the given truth-condition are returned.</p>
+     (= truth-condition (select-keys model (keys truth-condition)))))</pre></tr><tr><td class="docs"><p><hr />
+Filters a set of models so that only those consistent with the given truth-condition are returned.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn filter-models
   ([models truth-condition]
      (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))</pre></tr><tr><td class="docs">
@@ -2711,8 +2725,7 @@ $(document).ready(function() {
 <li>Repeat the procedure for each rule in the current group, and then move to the next group.</li>
 </ol>
 
-<p><hr />
-<strong>Example</strong></p>
+<p><strong>Example</strong></p>
 
 <pre><code>(def rules #{[:b :f]
              [:p :b]
@@ -2747,7 +2760,8 @@ $(document).ready(function() {
                                                    out))
                                                [] rz-plus))
                                      omega-r)})
-                   _Omega-r)))))</pre></tr><tr><td class="docs"><p>Updates the rules-map with scores from the output of the z-plus-order function.</p>
+                   _Omega-r)))))</pre></tr><tr><td class="docs"><p><hr />
+Updates the rules-map with scores from the output of the z-plus-order function.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2771,7 +2785,8 @@ $(document).ready(function() {
                    {r (+ (apply max (map (fn [rz] (rules-map rz)) m))
                          (rules-map r)
                          1)})
-                 z-ordered-rules))))</pre></tr><tr><td class="docs"><p>Returns a query result, that should be evaluated by score-query, given a z-ordered rule map and a query-map.</p>
+                 z-ordered-rules))))</pre></tr><tr><td class="docs"><p><hr />
+Returns a query result, that should be evaluated by score-query, given a z-ordered rule map and a query-map.</p>
 
 <p><strong>Examples</strong></p>
 
@@ -2781,66 +2796,137 @@ $(document).ready(function() {
                 [:b :w] 1
                 [:f :a] 1})
 
-(query rules-map {:p true, :b true, :f true}) ;;=&gt; score = 3
-(query rules-map {:p true, :b true, :f false}) ;;=&gt; score = 1
+(process-query rules-map {:p true, :b true, :f true}) ;;=&gt; score = 3
+(process-query rules-map {:p true, :b true, :f false}) ;;=&gt; score = 1
 ;; penguins ^ birds -&gt; fly
 
-(query rules-map {:b true, :p true}) ;;=&gt; score = 1
-(query rules-map {:b true, :p false}) ;;=&gt; score = 0
+(process-query rules-map {:b true, :p true}) ;;=&gt; score = 1
+(process-query rules-map {:b true, :p false}) ;;=&gt; score = 0
 ;; birds -&gt; not penguins
 
-(query rules-map {:r true, :b true, :f true}) ;;=&gt; score = 0
-(query rules-map {:r true, :b true, :f false}) ;;=&gt; score = 1
+(process-query rules-map {:r true, :b true, :f true}) ;;=&gt; score = 0
+(process-query rules-map {:r true, :b true, :f false}) ;;=&gt; score = 1
 ;; red ^ bird -&gt; fly
 
-(query rules-map {:b true, :a true}) ;;=&gt; score = 0
-(query rules-map {:b true, :a false}) ;;=&gt; score = 1
+(process-query rules-map {:b true, :a true}) ;;=&gt; score = 0
+(process-query rules-map {:b true, :a false}) ;;=&gt; score = 1
 ;; birds -&gt; airborn
 
-(query rules-map {:p true, :w true}) ;;=&gt; score = 1
-(query rules-map {:p true, :w false}) ;;=&gt; score = 1
+(process-query rules-map {:p true, :w true}) ;;=&gt; score = 1
+(process-query rules-map {:p true, :w false}) ;;=&gt; score = 1
 ;; undecided
 </code></pre>
-</td><td class="codes" /><pre class="brush: clojure">(defn query
-  ([z-ordered-rules-map query-map]
+</td><td class="codes" /><pre class="brush: clojure">(defn process-query
+  ([z-ordered-rules-map hypothesis-model]
      (map (fn [model]
-         (reduce (fn [v rule]
-                   (if ((set (vals (update-bindings model rule))) :inconsistent)
-                     (assoc v rule (z-ordered-rules-map rule)) v))
-                 {} (keys z-ordered-rules-map)))
-          (filter-models (generate-all-models-for-vars (clojure.set/union (set (keys query-map))
-                                                              (extract-vars (keys z-ordered-rules-map))))
-                         query-map))))</pre></tr><tr><td class="docs"><p>Returns a score associated with a query-result returned from the output of the query function.</p>
+            (reduce (fn [m rule]
+                      (if (-&gt; (update-bindings model rule)
+                              vals
+                              set
+                              :inconsistent)
+                        (assoc m rule (z-ordered-rules-map rule))
+                        m))
+                    {} (keys z-ordered-rules-map)))
+          (-&gt; (clojure.set/union (set (keys hypothesis-model))
+                                 (extract-vars (keys z-ordered-rules-map)))
+              generate-all-models-for-vars
+              (filter-models hypothesis-model)))))</pre></tr><tr><td class="docs"><p><hr />
+Returns a score associated with a query-result returned from the output of the query function.</p>
 
 <p>Queries are performed by submitting queries for multiple hypotheses, and then selecting the hypothesis with the lowest (i.e. least surprising) score.</p>
 
 <p><strong>Examples</strong></p>
 
-<pre><code>(score-query (query rules-map {:p true, :b true, :f true})) ;;=&gt; score = 3 ;
-(score-query (query rules-map {:p true, :b true, :f false})) ;;=&gt; score = 1 ;
+<pre><code>(score-query (process-query rules-map {:p true, :b true, :f true})) ;;=&gt; score = 3 ;
+(score-query (process-query rules-map {:p true, :b true, :f false})) ;;=&gt; score = 1 ;
 ;; penguins ^ birds -&gt; fly
 
-(score-query (query rules-map {:b true, :p true})) ;;=&gt; score = 1 ;
-(score-query (query rules-map {:b true, :p false})) ;;=&gt; score = 0 ;
+(score-query (process-query rules-map {:b true, :p true})) ;;=&gt; score = 1 ;
+(score-query (process-query rules-map {:b true, :p false})) ;;=&gt; score = 0 ;
 ;; birds -&gt; not penguins
 
-(score-query (query rules-map {:r true, :b true, :f true})) ;;=&gt; score = 0 ;
-(score-query (query rules-map {:r true, :b true, :f false})) ;;=&gt; score = 1 ;
+(score-query (process-query rules-map {:r true, :b true, :f true})) ;;=&gt; score = 0 ;
+(score-query (process-query rules-map {:r true, :b true, :f false})) ;;=&gt; score = 1 ;
 ;; red ^ birds -&gt; fly
 
-(score-query (query rules-map {:b true, :a true})) ;;=&gt; score = 0 ;
-(score-query (query rules-map {:b true, :a false})) ;;=&gt; score = 1 ;
+(score-query (process-query rules-map {:b true, :a true})) ;;=&gt; score = 0 ;
+(score-query (process-query rules-map {:b true, :a false})) ;;=&gt; score = 1 ;
 ;; birds -&gt; airborn
 
-(score-query (query rules-map {:p true, :w true})) ;;=&gt; score = 1 ;
-(score-query (query rules-map {:p true, :w false})) ;;=&gt; score = 1 ;
+(score-query (process-query rules-map {:p true, :w true})) ;;=&gt; score = 1 ;
+(score-query (process-query rules-map {:p true, :w false})) ;;=&gt; score = 1 ;
 ;; undecided
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn score-query
   ([query-result]
-     (apply min
-            (if-let [scores (seq (map #(apply max (if-let [x (vals %)] x [0]))
-                                                query-result))]
-                  scores
-                  [0]))))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+     (apply min (or (seq (map #(apply max (or (vals %) [0])) query-result)) [0]))))</pre></tr><tr><td class="docs"><hr />
+
+<h1>Public Functions</h1>
+</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
+Given a map associating rules to delta-values, returns a new map containing two keys, :delta-values (which is associated with the original map) and :z+-scores (which is associated with a map containing a "surprise" score for each rule).</p>
+
+<p>This compiled-rules map can be passed to the query function as an alternative to an uncompiled rules-map.</p>
+
+<p><strong>Examples</strong></p>
+
+<pre><code>(def rules-map {[:b :f] 1
+                [:p :b] 1
+                [:p [:not :f]] 1
+                [:b :w] 1
+                [:f :a] 1})
+
+(compile-rules rules-map)
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn compile-rules
+  ([rules-map]
+     {:delta-values rules-map
+      :z+-scores (-&gt;&gt; (partition-by-consistency (set (keys rules-map)))
+                      (apply z-plus-order)
+                      (apply-scores rules-map))}))</pre></tr><tr><td class="docs"><p><hr />
+Given either an uncompiled or compiled rules map and a series of hypothetical models, returns a map associating each hypothesis with a "surprise" score (i.e. the lowest score is the most likely).</p>
+
+<p><strong>Examples</strong></p>
+
+<pre><code>(def rules-map {[:b :f] 1
+                [:p :b] 1
+                [:p [:not :f]] 1
+                [:b :w] 1
+                [:f :a] 1})
+
+(def compiled-rules (compile-rules rules-map))
+
+;; penguins ^ birds -&gt; fly
+(query compiled-rules
+       {:p true, :b true, :f true}
+       {:p true, :b true, :f false})
+
+;; birds -&gt; not penguins
+(query compiled-rules
+       {:b true, :p true}
+       {:b true, :p false})
+
+;; red ^ birds -&gt; fly
+(query compiled-rules
+       {:r true, :b true, :f true}
+       {:r true, :b true, :f false})
+
+;; birds -&gt; airborn
+(query compiled-rules
+       {:b true, :a true}
+       {:b true, :a false})
+
+;; undecided
+(query compiled-rules
+       {:p true, :w true}
+       {:p true, :w false})
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn query 
+  ([rules-map &amp; hypotheses]
+     (let [scored-rules (or (:z+-scores rules-map)
+                            (:z+-scores (compile-rules rules-map)))]
+       (reduce (fn [results hypothesis]
+                 (assoc results
+                   hypothesis
+                   (score-query (process-query scored-rules hypothesis))))
+               {} hypotheses))))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
        SyntaxHighlighter.all()</script></body></html>

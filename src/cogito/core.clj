@@ -31,21 +31,28 @@ The difference between the delta value and the score associated with each rule i
 
 Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.
 
-Functions
-=========
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
+;; Internal Functions
+;; =========
+
 (defn antecedent
-  "Returns the antecedent of the given rule."
+  "
+****
+Returns the antecedent of the given rule."
   ([rule] (first rule)))
 
 (defn consequent
-  "Returns the consequent of the given rule."
+  "
+****
+Returns the consequent of the given rule."
   ([rule] (second rule)))
 
 (defn negated?
-  "Determines if the variable has been negated.
+  "
+****
+Determines if the variable has been negated.
 
 **Examples**
 
@@ -56,7 +63,9 @@ Functions
      (and (vector? x) (= (first x) :not))))
 
 (defn state
-  "Returns the state of the logical variable in the model, where a model consists of a map of logical variables and their associated truth values.
+  "
+****
+Returns the state of the logical variable in the model, where a model consists of a map of logical variables and their associated truth values.
 
 **Examples**
 
@@ -69,7 +78,9 @@ Functions
        (model x))))
 
 (defn get-var
-  "Returns the logical variable's name.
+  "
+****
+Returns the logical variable's name.
 
 **Examples**
 
@@ -80,7 +91,9 @@ Functions
      (if (negated? x) (second x) x)))
 
 (defmulti assoc-state
-    "Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.
+  "
+****
+Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.
 
 **Examples**
 
@@ -106,6 +119,7 @@ Functions
 
 (defn update-bindings
   "
+****
 Updates model with new bindings based on the given rule. One or more bindings in the model will have a value of :inconsistent, if the new rule is inconsistent with the current model.
 
 New values are only added to the model if the antecedent, 'a',  is already bound to true, then the value of 'b' is set to true if isn't bound yet, set to :inconsistent if it is already bound to false, otherwise it is left as is.
@@ -121,6 +135,7 @@ New values are only added to the model if the antecedent, 'a',  is already bound
 
 (defn append-rule
   "
+****
 Returns the model created by adding rule to rule-set. A logical variable in the model will have a truth-value of :inconsistent if the new rule is not tolerated in the rule-set.
 
 This method:
@@ -151,7 +166,9 @@ This method:
            m)))))
 
 (defn tolerate?
-  "Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well"
+  "
+****
+Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well"
   ([rule-set rule]
      (not ((set (vals (append-rule rule-set rule))) :inconsistent)))
   ([rule-set rule model]
@@ -159,6 +176,7 @@ This method:
 
 (defn partition-by-consistency
   "
+****
 Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.
 
 If the rule-set cannot be partitioned such, then it is inconsistent and nil will be returned.
@@ -181,29 +199,39 @@ See *Figure 2 Procedure for testing consistency* in Goldszmidt and Pearl.
            parts)))))
 
 (defn extract-vars
-  "Extracts logical variable names from a rule set."
+  "
+****
+Extracts logical variable names from a rule set."
   ([rule-set]
      (set (mapcat (fn [r] (map get-var r)) rule-set))))
 
 (defn generate-all-models-for-vars
-  "Generates all models possible for a given set of logical variables, even inconsistent models."
+  "
+****
+Generates all models possible for a given set of logical variables, even inconsistent models."
   ([vars]
      (let [truth-vals (comb/selections [true false] (count vars))]
        (map #(zipmap vars %) truth-vals))))
 
 (defn generate-all-models-for-ruleset
-  "Generates all models possible for a given rule-set, even inconsistent models."
+  "
+****
+Generates all models possible for a given rule-set, even inconsistent models."
   ([rule-set]
      (let [vars (extract-vars rule-set)]
        (generate-all-models-for-vars vars))))
 
 (defn entails?
-  "Determines if a set of truth-conditions are entailed by a given model."
+  "
+****
+Determines if a set of truth-conditions are entailed by a given model."
   ([model truth-condition]
      (= truth-condition (select-keys model (keys truth-condition)))))
 
 (defn filter-models
-  "Filters a set of models so that only those consistent with the given truth-condition are returned."
+  "
+****
+Filters a set of models so that only those consistent with the given truth-condition are returned."
   ([models truth-condition]
      (filter #(= truth-condition (select-keys % (keys truth-condition))) models)))
 
@@ -222,7 +250,6 @@ Z+-order algorithm
 4. Take the rule with the lowest Z(r) score and add it to the first group.
 5. Repeat the procedure for each rule in the current group, and then move to the next group.
 
-****
 **Example**
 
     (def rules #{[:b :f]
@@ -263,6 +290,7 @@ Z+-order algorithm
 
 (defn apply-scores
   "
+****
 Updates the rules-map with scores from the output of the z-plus-order function.
 
 **Examples**
@@ -288,8 +316,9 @@ Updates the rules-map with scores from the output of the z-plus-order function.
                          1)})
                  z-ordered-rules))))
 
-(defn query
+(defn process-query
   "
+****
 Returns a query result, that should be evaluated by score-query, given a z-ordered rule map and a query-map.
 
 **Examples**
@@ -300,73 +329,151 @@ Returns a query result, that should be evaluated by score-query, given a z-order
                     [:b :w] 1
                     [:f :a] 1})
 
-    (query rules-map {:p true, :b true, :f true}) ;;=> score = 3
-    (query rules-map {:p true, :b true, :f false}) ;;=> score = 1
+    (process-query rules-map {:p true, :b true, :f true}) ;;=> score = 3
+    (process-query rules-map {:p true, :b true, :f false}) ;;=> score = 1
     ;; penguins ^ birds -> fly
 
-    (query rules-map {:b true, :p true}) ;;=> score = 1
-    (query rules-map {:b true, :p false}) ;;=> score = 0
+    (process-query rules-map {:b true, :p true}) ;;=> score = 1
+    (process-query rules-map {:b true, :p false}) ;;=> score = 0
     ;; birds -> not penguins
 
-    (query rules-map {:r true, :b true, :f true}) ;;=> score = 0
-    (query rules-map {:r true, :b true, :f false}) ;;=> score = 1
+    (process-query rules-map {:r true, :b true, :f true}) ;;=> score = 0
+    (process-query rules-map {:r true, :b true, :f false}) ;;=> score = 1
     ;; red ^ bird -> fly
 
-    (query rules-map {:b true, :a true}) ;;=> score = 0
-    (query rules-map {:b true, :a false}) ;;=> score = 1
+    (process-query rules-map {:b true, :a true}) ;;=> score = 0
+    (process-query rules-map {:b true, :a false}) ;;=> score = 1
     ;; birds -> airborn
 
-    (query rules-map {:p true, :w true}) ;;=> score = 1
-    (query rules-map {:p true, :w false}) ;;=> score = 1
+    (process-query rules-map {:p true, :w true}) ;;=> score = 1
+    (process-query rules-map {:p true, :w false}) ;;=> score = 1
     ;; undecided
 
           
 "
-  ([z-ordered-rules-map query-map]
+  ([z-ordered-rules-map hypothesis-model]
      (map (fn [model]
-         (reduce (fn [v rule]
-                   (if ((set (vals (update-bindings model rule))) :inconsistent)
-                     (assoc v rule (z-ordered-rules-map rule)) v))
-                 {} (keys z-ordered-rules-map)))
-          (filter-models (generate-all-models-for-vars (clojure.set/union (set (keys query-map))
-                                                              (extract-vars (keys z-ordered-rules-map))))
-                         query-map))))
+            (reduce (fn [m rule]
+                      (if (-> (update-bindings model rule)
+                              vals
+                              set
+                              :inconsistent)
+                        (assoc m rule (z-ordered-rules-map rule))
+                        m))
+                    {} (keys z-ordered-rules-map)))
+          (-> (clojure.set/union (set (keys hypothesis-model))
+                                 (extract-vars (keys z-ordered-rules-map)))
+              generate-all-models-for-vars
+              (filter-models hypothesis-model)))))
 
 (defn score-query
   "
+****
 Returns a score associated with a query-result returned from the output of the query function.
 
 Queries are performed by submitting queries for multiple hypotheses, and then selecting the hypothesis with the lowest (i.e. least surprising) score.
 
 **Examples**
 
-    (score-query (query rules-map {:p true, :b true, :f true})) ;;=> score = 3 ;
-    (score-query (query rules-map {:p true, :b true, :f false})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:p true, :b true, :f true})) ;;=> score = 3 ;
+    (score-query (process-query rules-map {:p true, :b true, :f false})) ;;=> score = 1 ;
     ;; penguins ^ birds -> fly
 
-    (score-query (query rules-map {:b true, :p true})) ;;=> score = 1 ;
-    (score-query (query rules-map {:b true, :p false})) ;;=> score = 0 ;
+    (score-query (process-query rules-map {:b true, :p true})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:b true, :p false})) ;;=> score = 0 ;
     ;; birds -> not penguins
 
-    (score-query (query rules-map {:r true, :b true, :f true})) ;;=> score = 0 ;
-    (score-query (query rules-map {:r true, :b true, :f false})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:r true, :b true, :f true})) ;;=> score = 0 ;
+    (score-query (process-query rules-map {:r true, :b true, :f false})) ;;=> score = 1 ;
     ;; red ^ birds -> fly
 
-    (score-query (query rules-map {:b true, :a true})) ;;=> score = 0 ;
-    (score-query (query rules-map {:b true, :a false})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:b true, :a true})) ;;=> score = 0 ;
+    (score-query (process-query rules-map {:b true, :a false})) ;;=> score = 1 ;
     ;; birds -> airborn
 
-    (score-query (query rules-map {:p true, :w true})) ;;=> score = 1 ;
-    (score-query (query rules-map {:p true, :w false})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:p true, :w true})) ;;=> score = 1 ;
+    (score-query (process-query rules-map {:p true, :w false})) ;;=> score = 1 ;
     ;; undecided
 
 "
   ([query-result]
-     (apply min
-            (if-let [scores (seq (map #(apply max (if-let [x (vals %)] x [0]))
-                                                query-result))]
-                  scores
-                  [0]))))
+     (apply min (or (seq (map #(apply max (or (vals %) [0])) query-result)) [0]))))
 
 
-       
+;; ****
+;; Public Functions
+;; ================
+
+(defn compile-rules
+  "
+****
+Given a map associating rules to delta-values, returns a new map containing two keys, :delta-values (which is associated with the original map) and :z+-scores (which is associated with a map containing a \"surprise\" score for each rule).
+
+This compiled-rules map can be passed to the query function as an alternative to an uncompiled rules-map.
+
+**Examples**
+
+    (def rules-map {[:b :f] 1
+                    [:p :b] 1
+                    [:p [:not :f]] 1
+                    [:b :w] 1
+                    [:f :a] 1})
+
+    (compile-rules rules-map)
+
+"
+  ([rules-map]
+     {:delta-values rules-map
+      :z+-scores (->> (partition-by-consistency (set (keys rules-map)))
+                      (apply z-plus-order)
+                      (apply-scores rules-map))}))
+
+(defn query 
+  "
+****
+Given either an uncompiled or compiled rules map and a series of hypothetical models, returns a map associating each hypothesis with a \"surprise\" score (i.e. the lowest score is the most likely).
+
+**Examples**
+
+    (def rules-map {[:b :f] 1
+                    [:p :b] 1
+                    [:p [:not :f]] 1
+                    [:b :w] 1
+                    [:f :a] 1})
+
+    (def compiled-rules (compile-rules rules-map))
+
+    ;; penguins ^ birds -> fly
+    (query compiled-rules
+           {:p true, :b true, :f true}
+           {:p true, :b true, :f false})
+
+    ;; birds -> not penguins
+    (query compiled-rules
+           {:b true, :p true}
+           {:b true, :p false})
+
+    ;; red ^ birds -> fly
+    (query compiled-rules
+           {:r true, :b true, :f true}
+           {:r true, :b true, :f false})
+
+    ;; birds -> airborn
+    (query compiled-rules
+           {:b true, :a true}
+           {:b true, :a false})
+
+    ;; undecided
+    (query compiled-rules
+           {:p true, :w true}
+           {:p true, :w false})
+
+"
+  ([rules-map & hypotheses]
+     (let [scored-rules (or (:z+-scores rules-map)
+                            (:z+-scores (compile-rules rules-map)))]
+       (reduce (fn [results hypothesis]
+                 (assoc results
+                   hypothesis
+                   (score-query (process-query scored-rules hypothesis))))
+               {} hypotheses))))
