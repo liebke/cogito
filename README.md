@@ -41,13 +41,13 @@ Queries are made by submitting competing hypotheses, the one that is the least s
 ****
 **Example**
 
-The following example takes the above rules-map, compiles it, and runs several queries (each compare two competing hypotheses), which returns a map that associates a \"surprise\" score with each hypothesis, the lowest score wins.
+The following example takes the above rules-map, compiles it, and runs several queries (each compare two competing hypotheses), which returns a map that associates a "surprise" score with each hypothesis, the lowest score wins.
 
 A hypothesis is a model (map of truth values) formed from a logical statement. For instance, a statement
 
     penguins ^ birds -> fly
 
-can be read as \"penguin birds can fly\" and can be represented in a truth-value map as:
+can be read as "penguin birds can fly" and can be represented in a truth-value map as:
 
     {:p true, :b true, :f true}
 
@@ -67,7 +67,7 @@ can be translated to the following rules-map.
                     [:b :w] 1
                     [:f :a] 1})
 
-All of the rules have a delta-value of one, these values can be adjusted if not all the rules have the same \"strength\".
+All of the rules have a delta-value of one, these values can be adjusted if not all the rules have the same "strength".
 
 Next compile the rules-map,
 
@@ -156,7 +156,6 @@ Build It
 Either:
 
     script/build.sh
-    script/build-docs.sh
 
 Or:
 
