@@ -48,21 +48,58 @@
 
 (deftest score-query-test
   ;; penguins ^ birds -> fly
-  (is (score-query (query z-ordered-rules-map {:p true, :b true, :f true})) 3)
-  (is (score-query (query z-ordered-rules-map {:p true, :b true, :f false})) 1)
+  (is (score-query (process-query z-ordered-rules-map {:p true, :b true, :f true})) 3)
+  (is (score-query (process-query z-ordered-rules-map {:p true, :b true, :f false})) 1)
   
   ;; birds -> penguins
-  (is (score-query (query z-ordered-rules-map {:b true, :p true})) 1)
-  (is (score-query (query z-ordered-rules-map {:b true, :p false})) 0)
+  (is (score-query (process-query z-ordered-rules-map {:b true, :p true})) 1)
+  (is (score-query (process-query z-ordered-rules-map {:b true, :p false})) 0)
   
   ;; red ^ birds -> fly
-  (is (score-query (query z-ordered-rules-map {:r true, :b true, :f true})) 0)
-  (is (score-query (query z-ordered-rules-map {:r true, :b true, :f false})) 1)
+  (is (score-query (process-query z-ordered-rules-map {:r true, :b true, :f true})) 0)
+  (is (score-query (process-query z-ordered-rules-map {:r true, :b true, :f false})) 1)
 
   ;; birds -> airborn
-  (is (score-query (query z-ordered-rules-map {:b true, :a true})) 0)
-  (is (score-query (query z-ordered-rules-map {:b true, :a false})) 1) 
+  (is (score-query (process-query z-ordered-rules-map {:b true, :a true})) 0)
+  (is (score-query (process-query z-ordered-rules-map {:b true, :a false})) 1) 
   
   ;; undecided
-  (is (score-query (query z-ordered-rules-map {:p true, :w true})) 1)
-  (is (score-query (query z-ordered-rules-map {:p true, :w false})) 0))
+  (is (score-query (process-query z-ordered-rules-map {:p true, :w true})) 1)
+  (is (score-query (process-query z-ordered-rules-map {:p true, :w false})) 0))
+
+
+(deftest query-test
+   ;; penguins ^ birds -> fly
+  (is (query z-ordered-rules-map
+	     {:p true, :b true, :f true}
+	     {:p true, :b true, :f false})
+      {{:p true, :b true, :f true} 3
+       {:p true, :b true, :f false} 1})
+  
+  ;; birds -> penguins
+  (is (query z-ordered-rules-map
+	     {:b true, :p true}
+	     {:b true, :p false})
+      {{:b true, :p true} 1
+       {:b true, :p false} 0})
+  
+  ;; red ^ birds -> fly
+  (is (query z-ordered-rules-map
+	     {:r true, :b true, :f true}
+	     {:r true, :b true, :f false})
+      {{:r true, :b true, :f true} 0
+       {:r true, :b true, :f false} 1})
+
+  ;; birds -> airborn
+  (is (query z-ordered-rules-map
+	     {:b true, :a true}
+	     {:b true, :a false})
+      {{:b true, :a true} 0
+       {:b true, :a false} 1})
+  
+  ;; undecided
+  (is (query z-ordered-rules-map
+	     {:p true, :w true}
+	     {:p true, :w false})
+      {{:p true, :w true} 1
+       {:p true, :w false} 0}))
