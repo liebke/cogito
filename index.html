@@ -2559,6 +2559,126 @@ $(document).ready(function() {
 <p>The difference between the delta value and the score associated with each rule is that delta only represents the strength between the given antecedent and consequent, whereas the score takes all the other rules into consideration.</p>
 
 <p>Queries are made by submitting competing hypotheses, the one that is the least surprising (i.e. has the lowest score associated with it) is selected.</p>
+
+<p><hr />
+<strong>Example</strong></p>
+
+<p>The following example takes the above rules-map, compiles it, and runs several queries (each compare two competing hypotheses), which returns a map that associates a "surprise" score with each hypothesis, the lowest score wins.</p>
+
+<p>A hypothesis is a model (map of truth values) formed from a logical statement. For instance, a statement</p>
+
+<pre><code>penguins ^ birds -&gt; fly
+</code></pre>
+
+<p>can be read as "penguin birds can fly" and can be represented in a truth-value map as:</p>
+
+<pre><code>{:p true, :b true, :f true}
+</code></pre>
+
+<p>The following rules,</p>
+
+<ul>
+<li>birds fly</li>
+<li>penguins are birds</li>
+<li>penguins cannot fly</li>
+<li>birds have wings</li>
+<li>flying implies airborn</li>
+</ul>
+
+<p>can be translated to the following rules-map.</p>
+
+<pre><code>(def rules-map {[:b :f] 1
+                [:p :b] 1
+                [:p [:not :f]] 1
+                [:b :w] 1
+                [:f :a] 1})
+</code></pre>
+
+<p>All of the rules have a delta-value of one, these values can be adjusted if not all the rules have the same "strength".</p>
+
+<p>Next compile the rules-map,</p>
+
+<pre><code>(def compiled-rules (compile-rules rules-map))
+</code></pre>
+
+<p>and then run the following queries against it.</p>
+
+<p><strong>Do penguin birds fly?</strong></p>
+
+<p>This query is submitted by creating two hypotheses, one where penguin birds fly and one where they don't.</p>
+
+<pre><code>(query compiled-rules
+       {:p true, :b true, :f true}
+       {:p true, :b true, :f false})
+</code></pre>
+
+<p>The results are that flying penguins that more surprising than non-flying ones.</p>
+
+<pre><code>penguins ^ birds -&gt; fly    (score)
+----------------------------------
+true       true     true   (3)
+true       true     false  (1)
+</code></pre>
+
+<p><strong>Are all birds penguins?</strong></p>
+
+<pre><code>(query compiled-rules
+       {:b true, :p true}
+       {:b true, :p false})
+</code></pre>
+
+<p>The results are that not all birds are penguins.</p>
+
+<pre><code>birds -&gt; not penguins    (score)
+--------------------------------
+true     not true        (0)
+true     not false       (1)
+</code></pre>
+
+<p><strong>Do red birds fly?</strong></p>
+
+<pre><code>(query compiled-rules
+       {:r true, :b true, :f true}
+       {:r true, :b true, :f false})
+</code></pre>
+
+<p>The results are that red birds do fly.</p>
+
+<pre><code>red ^ birds -&gt; fly    (score)
+-----------------------------
+true  true     true   (0)
+true  true     false  (1)
+</code></pre>
+
+<p><strong>Are birds airborn?</strong></p>
+
+<pre><code>(query compiled-rules
+       {:b true, :a true}
+       {:b true, :a false})
+</code></pre>
+
+<p>The results are that birds are airborn.</p>
+
+<pre><code>birds -&gt; airborn    (score)
+--------------------------
+true     true       (0)
+true     false      (1)
+</code></pre>
+
+<p><strong>Do penguins have wings?</strong></p>
+
+<pre><code>(query compiled-rules
+       {:p true, :w true}
+       {:p true, :w false})
+</code></pre>
+
+<p>This is a known area of weakness for System-Z+, it cannot decide whether penguins have wings.</p>
+
+<pre><code>penguins -&gt; wings    (score)
+----------------------------
+true        true     (1)
+true        false    (1)
+</code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(ns cogito.core
   (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><h1>Internal Functions</h1>
 </td><td class="codes" /></tr><tr><td class="docs"><p><hr />
@@ -2665,9 +2785,17 @@ Returns the model created by adding rule to rule-set. A logical variable in the 
 Determines if a rule is tolerated by an existing rule-set, an optional model can be provided as well</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn tolerate?
   ([rule-set rule]
-     (not ((set (vals (append-rule rule-set rule))) :inconsistent)))
+     (-&gt; (append-rule rule-set rule)
+         vals
+         set
+         :inconsistent
+         not))
   ([rule-set rule model]
-     (not ((set (vals (append-rule rule-set rule model))) :inconsistent))))</pre></tr><tr><td class="docs"><p><hr />
+     (-&gt; (append-rule rule-set rule model)
+         vals
+         set
+         :inconsistent
+         not)))</pre></tr><tr><td class="docs"><p><hr />
 Partitions a set of rules into a set of groups orderd from general to specific, where the rules in each group are tolerated by all the rules in its group as well as all later groups.</p>
 
 <p>If the rule-set cannot be partitioned such, then it is inconsistent and nil will be returned.</p>
@@ -2743,24 +2871,23 @@ Filters a set of models so that only those consistent with the given truth-condi
 ;;=&gt; {[:p :b] ([:b :f]), [:p [:not :f]] ([:b :f])}
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn z-plus-order
-  ([rz-plus _Delta-star]
-     (let [_Omega-r (apply merge
-                           (map (fn [r]
-                                  {r (filter (fn [model]
-                                               (tolerate? _Delta-star r model))
-                                             (filter-models (generate-all-models-for-ruleset _Delta-star)
-                                                             (assoc-state {} r [true true])))})
-                                _Delta-star))]
-       (apply merge
-              (map (fn [[r-star omega-r]]
-                     {r-star (mapcat (fn [model]
-                                       (reduce (fn [out rz-rule]
-                                                 (if (entails? model (assoc-state {} rz-rule [true false]))
-                                                   (conj out rz-rule)
-                                                   out))
-                                               [] rz-plus))
-                                     omega-r)})
-                   _Omega-r)))))</pre></tr><tr><td class="docs"><p><hr />
+  ([rz-plus delta-star]
+     (letfn [(generate-models [r]
+               {r (filter (fn [model] (tolerate? delta-star r model))
+                          (filter-models (generate-all-models-for-ruleset delta-star)
+                                         (assoc-state {} r [true true])))})
+             (find-inconsistent-models [[r-star omega-r]]
+               {r-star (mapcat (fn [model]
+                                 (reduce (fn [out rz-rule]
+                                           (if (entails? model (assoc-state {} rz-rule [true false]))
+                                             (conj out rz-rule)
+                                             out))
+                                         [] rz-plus))
+                               omega-r)})]
+       (-&gt;&gt; (map generate-models delta-star)
+            (apply merge)
+            (map find-inconsistent-models)
+            (apply merge)))))</pre></tr><tr><td class="docs"><p><hr />
 Updates the rules-map with scores from the output of the z-plus-order function.</p>
 
 <p><strong>Examples</strong></p>
