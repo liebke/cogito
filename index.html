@@ -2679,14 +2679,7 @@ true        true     (1)
 true        false    (1)
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(ns cogito.core
-  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><h1>Internal Functions</h1>
-</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
-Returns the antecedent of the given rule.</p>
-</td><td class="codes" /><pre class="brush: clojure">(defn antecedent
-  ([rule] (first rule)))</pre></tr><tr><td class="docs"><p><hr />
-Returns the consequent of the given rule.</p>
-</td><td class="codes" /><pre class="brush: clojure">(defn consequent
-  ([rule] (second rule)))</pre></tr><tr><td class="docs"><p><hr />
+  (:require [clojure.contrib.combinatorics :as comb]))</pre></tr><tr><td class="docs"><p><hr />
 Determines if the variable has been negated.</p>
 
 <p><strong>Examples</strong></p>
@@ -2697,6 +2690,112 @@ Determines if the variable has been negated.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn negated?
   ([x]
      (and (vector? x) (= (first x) :not))))</pre></tr><tr><td class="docs"><p><hr />
+Returns the logical variable's name.</p>
+
+<p><strong>Examples</strong></p>
+
+<pre><code>(get-var :x) ;=&gt; :x
+(get-var [:not :x]) ;=&gt; :x
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn get-var
+  ([x]
+     (if (negated? x) (second x) x)))</pre></tr><tr><td class="docs"><p><hr />
+Extracts logical variable names from a rule set.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn extract-vars
+  ([rule-set]
+     (set (mapcat (fn [r] (map get-var r)) rule-set))))</pre></tr><tr><td class="docs"><p><hr />
+Generates all models possible for a given set of logical variables, even inconsistent models.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-vars
+  ([vars]
+     (let [truth-vals (comb/selections [true false] (count vars))]
+       (map #(zipmap vars %) truth-vals))))</pre></tr><tr><td class="docs"><p><hr />
+Generates all models possible for a given rule-set, even inconsistent models.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-ruleset
+  ([rule-set]
+     (let [vars (extract-vars rule-set)]
+       (generate-all-models-for-vars vars))))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn assoc-truth-value
+  ([model logical-var truth-value]
+     (cond
+      (nil? (model logical-var)) (assoc model logical-var truth-value)
+      (not= (model logical-var) truth-value) (assoc model logical-var :inconsistent)
+      :else model)))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn merge-truth-values
+  ([&amp; models]
+     (reduce #(merge-with (fn [val1 val2]
+			    (if (not= val1 val2) :inconsistent val1))
+			  %1 %2)
+	     {} models)))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn- to-model
+  ([term] (if (keyword? term) [{term true}] term)))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn filter-inconsistent-models
+  ([&amp; models]
+     (filter #(-&gt; % vals set :inconsistent not) models)))</pre></tr><tr><td class="docs"><h1>Logical Operation Functions</h1>
+</td><td class="codes" /></tr><tr><td class="docs"><p><strong>Examples</strong></p>
+
+<pre><code>($not :a)
+;; =&gt; #{{:a false}}
+
+($not [{:a true, :b true}])
+;; =&gt; #{{:b false, :a false} {:b false, :a true} {:b true, :a false}}
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn $not
+  ([term]
+     (if (keyword? term)
+       (set [{term false}])
+       (let [models (set (generate-all-models-for-vars (keys (first term))))]
+	 (clojure.set/difference models (set term))))))</pre></tr><tr><td class="docs"><p><strong>Examples</strong></p>
+
+<pre><code>($and ($not :a) ($not :b))
+;; =&gt;({:b false, :a false})
+
+($and :a ($not [{:b false, :d true} {:b false, :d false}]))
+;; =&gt; ({:b true, :d true, :a true} {:b true, :d false, :a true})
+
+($and ($not [{:a true :c true} {:a true :c false}]) ($not [{:b false, :d true} {:b false, :d false}]))
+;; =&gt; ({:b true, :d true, :a false, :c true} {:b true, :d false, :a false, :c true} {:b true, :d true, :a false, :c false} {:b true, :d false, :a false, :c false})
+
+($and ($not [{:a true :c true} {:a true :c false}]) ($not [{:a false, :d true} {:a false, :d false}]))
+;; =&gt; ({:d false, :a :inconsistent, :c true} {:d true, :a :inconsistent, :c true} {:d false, :a :inconsistent, :c false} {:d true, :a :inconsistent, :c false})
+
+($and ($not [{:a true :c true} {:a true :c false}]) ($not [{:a true, :d true} {:a true, :d false}]))
+;; =&gt; ({:d false, :a false, :c true} {:d true, :a false, :c true} {:d false, :a false, :c false} {:d true, :a false, :c false})
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn $and
+  ([term &amp; terms]
+     (reduce (fn [a b]
+	       (let [a (if (keyword? a) [{a true}] a)
+		     b (if (keyword? b) [{b true}] b)]
+		 (apply filter-inconsistent-models
+			(map #(apply merge-truth-values %)
+			     (comb/cartesian-product a b)))))
+	     term terms)))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn $or
+  ([term &amp; terms]
+     (reduce (fn [a b]
+	       (let [a (to-model a)
+		     b (to-model b)]
+		 (apply filter-inconsistent-models
+			(map #(apply merge-truth-values %)
+			     (set (concat
+				   (comb/cartesian-product a b)
+				   (comb/cartesian-product a ($not b))
+				   (comb/cartesian-product ($not a) b)))))))
+	     term terms)))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn $=&gt;
+  ([a b]
+    (let [a (to-model a)
+	  b (to-model b)]
+      ($or ($and a b)
+	   ($and ($not a)
+		 ($or b ($not b)))))))</pre></tr><tr><td class="docs"><h1>Z-System Internal Functions</h1>
+</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
+Returns the antecedent of the given rule.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn antecedent
+  ([rule] (first rule)))</pre></tr><tr><td class="docs"><p><hr />
+Returns the consequent of the given rule.</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn consequent
+  ([rule] (second rule)))</pre></tr><tr><td class="docs"><p><hr />
 Returns the state of the logical variable in the model, where a model consists of a map of logical variables and their associated truth values.</p>
 
 <p><strong>Examples</strong></p>
@@ -2709,16 +2808,6 @@ Returns the state of the logical variable in the model, where a model consists o
      (if (negated? x)
        (not (model (second x)))
        (model x))))</pre></tr><tr><td class="docs"><p><hr />
-Returns the logical variable's name.</p>
-
-<p><strong>Examples</strong></p>
-
-<pre><code>(get-var :x) ;=&gt; :x
-(get-var [:not :x]) ;=&gt; :x
-</code></pre>
-</td><td class="codes" /><pre class="brush: clojure">(defn get-var
-  ([x]
-     (if (negated? x) (second x) x)))</pre></tr><tr><td class="docs"><p><hr />
 Associates a truth-value(s) with a logical variable, or a pair of truth-values with a rule in the given model.</p>
 
 <p><strong>Examples</strong></p>
@@ -2815,20 +2904,6 @@ Partitions a set of rules into a set of groups orderd from general to specific, 
                       (apply clojure.set/difference rule-set new-part parts))
                nil))
            parts)))))</pre></tr><tr><td class="docs"><p><hr />
-Extracts logical variable names from a rule set.</p>
-</td><td class="codes" /><pre class="brush: clojure">(defn extract-vars
-  ([rule-set]
-     (set (mapcat (fn [r] (map get-var r)) rule-set))))</pre></tr><tr><td class="docs"><p><hr />
-Generates all models possible for a given set of logical variables, even inconsistent models.</p>
-</td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-vars
-  ([vars]
-     (let [truth-vals (comb/selections [true false] (count vars))]
-       (map #(zipmap vars %) truth-vals))))</pre></tr><tr><td class="docs"><p><hr />
-Generates all models possible for a given rule-set, even inconsistent models.</p>
-</td><td class="codes" /><pre class="brush: clojure">(defn generate-all-models-for-ruleset
-  ([rule-set]
-     (let [vars (extract-vars rule-set)]
-       (generate-all-models-for-vars vars))))</pre></tr><tr><td class="docs"><p><hr />
 Determines if a set of truth-conditions are entailed by a given model.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn entails?
   ([model truth-condition]
@@ -2985,9 +3060,7 @@ Returns a score associated with a query-result returned from the output of the q
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn score-query
   ([query-result]
-     (apply min (or (seq (map #(apply max (or (vals %) [0])) query-result)) [0]))))</pre></tr><tr><td class="docs"><hr />
-
-<h1>Public Functions</h1>
+     (apply min (or (seq (map #(apply max (or (vals %) [0])) query-result)) [0]))))</pre></tr><tr><td class="docs"><h1>Query Functions</h1>
 </td><td class="codes" /></tr><tr><td class="docs"><p><hr />
 Given a map associating rules to delta-values, returns a new map containing two keys, :delta-values (which is associated with the original map) and :z+-scores (which is associated with a map containing a "surprise" score for each rule).</p>
 
@@ -3054,5 +3127,73 @@ Given either an uncompiled or compiled rules map and a series of hypothetical mo
                  (assoc results
                    hypothesis
                    (score-query (process-query scored-rules hypothesis))))
-               {} hypotheses))))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+               {} hypotheses))))</pre></tr><tr><td class="docs"><p>Returns a map of scores for the valid hypotheses associated with the given antecedent and consequent.</p>
+
+<pre><code>(def rules {[:b :f] 1
+            [:p :b] 1
+            [:p [:not :f]] 1
+            [:b :w] 1
+            [:f :a] 1})
+
+(entailed rules ($and :p :b) :f)
+;;=&gt; {{:b true, :p true, :f true} 3, {:f false, :p true, :b true} 1}
+
+(entailed rules :b ($not :p))
+;;=&gt; {{:p true, :b true} 1, {:b true, :p false} 0}
+
+(entailed rules ($and :r :b) :f)
+;;=&gt; {{:b true, :r true, :f true} 0, {:f false, :r true, :b true} 1}
+
+(entailed rules :b :a)
+;;=&gt; {{:a false, :b true} 1, {:b true, :a true} 0}
+
+(entailed rules :p :w)
+;;=&gt; {{:w false, :p true} 1, {:p true, :w true} 1}
+
+(entailed rules ($or :b :p) :f)
+;;=&gt; {{:p true, :b true, :f true} 3,
+      {:p false, :b true, :f true} 0,
+      {:f false, :b true, :p true} 1,
+      {:p true, :b false, :f true} 3,
+      {:f false, :b true, :p false} 1,
+      {:f false, :b false, :p true} 3}
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn entailed
+  ([rules antecedent consequent]
+    (let [a (to-model antecedent)
+	  b (to-model consequent)]
+      (apply query rules ($or ($and a b)
+			      ($and a ($not b)))))))</pre></tr><tr><td class="docs"><p>Returns a boolean indicating whether the given consequent is entailed from the antecendent and rules.</p>
+
+<pre><code>(def rules {[:b :f] 1
+            [:p :b] 1
+            [:p [:not :f]] 1
+            [:b :w] 1
+            [:f :a] 1})
+
+(entailed? rules ($and :p :b) :f) ;;=&gt; false
+
+(entailed? rules :b ($not :p)) ;;=&gt; true
+
+(entailed? rules ($and :r :b) :f) ;;=&gt; true
+
+(entailed? rules :b :a) ;;=&gt; true
+
+(entailed? rules :p :w) ;;=&gt; nil
+
+(entailed? rules ($or :b :p) :f) ;;=&gt; true
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn entailed?
+  ([rules antecedent consequent]
+    (let [a (to-model antecedent)
+	  b (to-model consequent)
+	  h0 (apply min (vals (apply query rules ($and a ($not b)))))
+	  h1 (apply min (vals (apply query rules ($and a b))))]
+      (cond
+       (= h0 h1)
+         nil
+       (&gt; h0 h1)
+         true
+       :else
+         false))))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
        SyntaxHighlighter.all()</script></body></html>

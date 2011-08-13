@@ -103,3 +103,37 @@
 	      {:p true, :w false})
 	 {{:p true, :w true} 1
 	  {:p true, :w false} 1})))
+
+(deftest entailed-test
+
+    (is (= (entailed rules-map ($and :p :b) :f)
+	   {{:b true, :p true, :f true} 3, {:f false, :p true, :b true} 1}))
+
+    (is (= (entailed rules-map :b ($not :p))
+	   {{:p true, :b true} 1, {:b true, :p false} 0}))
+
+    (is (= (entailed rules-map ($and :r :b) :f)
+	   {{:b true, :r true, :f true} 0, {:f false, :r true, :b true} 1}))
+
+    (is (= (entailed rules-map :b :a)
+	   {{:a false, :b true} 1, {:b true, :a true} 0}))
+
+    (is (= (entailed rules-map :p :w)
+	   {{:w false, :p true} 1, {:p true, :w true} 1}))
+
+    (is (= (entailed rules-map ($or :b :p) :f)
+	   {{:p true, :b true, :f true} 3,
+	    {:p false, :b true, :f true} 0,
+	    {:f false, :b true, :p true} 1,
+	    {:p true, :b false, :f true} 3,
+	    {:f false, :b true, :p false} 1,
+	    {:f false, :b false, :p true} 3})))
+
+
+(deftest entailed?-test
+  (is (false? (entailed? rules-map ($and :p :b) :f))) 
+  (is (true? (entailed? rules-map :b ($not :p)))) 
+  (is (true? (entailed? rules-map ($and :r :b) :f)))
+  (is (true? (entailed? rules-map :b :a)))
+  (is (nil? (entailed? rules-map :p :w)))
+  (is (true? (entailed? rules-map ($or :b :p) :f))))
