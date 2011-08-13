@@ -196,7 +196,9 @@ Generates all models possible for a given rule-set, even inconsistent models."
        (generate-all-models-for-vars vars))))
 
 (defn assoc-truth-value
-  ""
+  "
+****
+"
   ([model logical-var truth-value]
      (cond
       (nil? (model logical-var)) (assoc model logical-var truth-value)
@@ -204,7 +206,9 @@ Generates all models possible for a given rule-set, even inconsistent models."
       :else model)))
 
 (defn merge-truth-values
-  ""
+  "
+****
+"
   ([& models]
      (reduce #(merge-with (fn [val1 val2]
 			    (if (not= val1 val2) :inconsistent val1))
@@ -212,11 +216,16 @@ Generates all models possible for a given rule-set, even inconsistent models."
 	     {} models)))
 
 (defn- to-model
-  ""
-  ([term] (if (keyword? term) [{term true}] term)))
+  "
+****
+"
+  ([term] (if (keyword? term) [{term true}] term))
+  ([term value] (if (keyword? term) [{term value}] term)))
 
 (defn filter-inconsistent-models
-  ""
+  "
+****
+"
   ([& models]
      (filter #(-> % vals set :inconsistent not) models)))
 
@@ -226,6 +235,7 @@ Generates all models possible for a given rule-set, even inconsistent models."
 
 (defn $not
   "
+****
 **Examples**
 
     ($not :a)
@@ -236,12 +246,13 @@ Generates all models possible for a given rule-set, even inconsistent models."
 "
   ([term]
      (if (keyword? term)
-       (set [{term false}])
-       (let [models (set (generate-all-models-for-vars (keys (first term))))]
-	 (clojure.set/difference models (set term))))))
+       (to-model term false)
+       (clojure.set/difference (set (generate-all-models-for-vars (keys (first term))))
+			       (set term)))))
 
 (defn $and
   "
+****
 **Examples**
 
     ($and ($not :a) ($not :b))
@@ -263,15 +274,17 @@ Generates all models possible for a given rule-set, even inconsistent models."
 "
   ([term & terms]
      (reduce (fn [a b]
-	       (let [a (if (keyword? a) [{a true}] a)
-		     b (if (keyword? b) [{b true}] b)]
+	       (let [a (to-model a)
+		     b (to-model b)]
 		 (apply filter-inconsistent-models
 			(map #(apply merge-truth-values %)
 			     (comb/cartesian-product a b)))))
 	     term terms)))
 
 (defn $or
-  ""
+  "
+****
+"
   ([term & terms]
      (reduce (fn [a b]
 	       (let [a (to-model a)
@@ -285,7 +298,9 @@ Generates all models possible for a given rule-set, even inconsistent models."
 	     term terms)))
 
 (defn $=>
-  ""
+  "
+****
+"
   ([a b]
     (let [a (to-model a)
 	  b (to-model b)]
@@ -505,7 +520,6 @@ Z+-order algorithm
             (map find-inconsistent-models)
             (apply merge)))))
 
-
 (defn apply-scores
   "
 ****
@@ -697,6 +711,7 @@ Given either an uncompiled or compiled rules map and a series of hypothetical mo
 
 (defn entailed
   "
+****
 Returns a map of scores for the valid hypotheses associated with the given antecedent and consequent.
 
     (def rules {[:b :f] 1
@@ -737,6 +752,7 @@ Returns a map of scores for the valid hypotheses associated with the given antec
 
 (defn entailed?
   "
+****
 Returns a boolean indicating whether the given consequent is entailed from the antecendent and rules.
 
     (def rules {[:b :f] 1
@@ -770,3 +786,24 @@ Returns a boolean indicating whether the given consequent is entailed from the a
          true
        :else
          false))))
+
+
+;; Experimental functions
+;; ======================
+
+(defn find-inconsistent-models
+  "
+****
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
+
+    (find-inconsistent-models [:a :b :c :d :e :f] [:a :b] [:e :f])
+"
+  ([model-vars [a b :as consistent-rule] [e f :as inconsistent-rule]]
+     (let [c-rules #{a b}
+	   i-rules #{e f}
+	   vars (clojure.set/difference (set model-vars) c-rules i-rules)]
+       {[consistent-rule inconsistent-rule]
+	($and ($and a b)
+	      (apply $or vars)
+	      ($and e ($not f)))})))
+
