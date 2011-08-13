@@ -219,8 +219,8 @@ Generates all models possible for a given rule-set, even inconsistent models."
   "
 ****
 "
-  ([term] (if (keyword? term) [{term true}] term))
-  ([term value] (if (keyword? term) [{term value}] term)))
+  ([term] (if (keyword? term) #{{term true}} term))
+  ([term value] (if (keyword? term) #{{term value}} term)))
 
 (defn filter-inconsistent-models
   "
@@ -311,6 +311,29 @@ Generates all models possible for a given rule-set, even inconsistent models."
 
 ;; Z-System Internal Functions
 ;; =========
+
+(defn stmt-to-models
+  "
+****
+
+    (stmt-to-models [:not :a])
+    (stmt-to-models [:and :a :b])
+    (stmt-to-models [:or :a :b])
+    (stmt-to-models [:=> :a :b])
+    (stmt-to-models [:and [:not :a] :b])
+    (stmt-to-models [:or [:not :a] :b])
+    (stmt-to-models [:or [:and :a :b] [:and :c :d]])
+
+"
+  ([stmt]
+     (if (keyword? stmt)
+       (to-model stmt)
+       (condp = (first stmt)
+	   :not (apply $not (map #(stmt-to-models %) (rest stmt)))
+	   :and (apply $and (map #(stmt-to-models %) (rest stmt)))
+	   :or (apply $or (map #(stmt-to-models %) (rest stmt)))
+	   :=> (apply $=> (map #(stmt-to-models %) (rest stmt)))
+	   stmt))))
 
 (defn antecedent
   "
@@ -796,9 +819,10 @@ Returns a boolean indicating whether the given consequent is entailed from the a
 ****
 Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
 
-    (find-inconsistent-models [:a :b :c :d :e :f] [:a :b] [:e :f])
+    (find-inconsistent-models [:a :b :c :d :e :f] [:=> :a :b] [:=> :e :f])
+    (find-inconsistent-models [:b :f :p :w :a] [:=> :p [:not :f]] [:=> :b :f])
 "
-  ([model-vars [a b :as consistent-rule] [e f :as inconsistent-rule]]
+  ([model-vars [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
      (let [c-rules #{a b}
 	   i-rules #{e f}
 	   vars (clojure.set/difference (set model-vars) c-rules i-rules)]
@@ -806,4 +830,59 @@ Finds all the models possible from the model-vars that are consistent with the f
 	($and ($and a b)
 	      (apply $or vars)
 	      ($and e ($not f)))})))
+
+(defn get-vars
+  ""
+  ([rule-set]
+     (set (mapcat #(rest %) (seq rule-set)))))
+
+(map #(find-inconsistent-models [:b :f :p :w :a] (first %) (second %)) (apply comb/cartesian-product (partition-rules rules)))
+
+(for [ir (seq (first (partition-rules rules))) cr (seq (second (partition-rules rules)))]
+  (find-inconsistent-models [:b :f :p :w :a] cr ir))
+
+(defn consistent-models
+  "
+****
+
+    (def rules #{[:=> :b :f]
+                 [:=> :p :b]
+                 [:=> :p [:not :f]]
+                 [:=> :b :w]
+                 [:=> :f :a]})
+
+    (consistent-models rules [:=> :b :f])
+    (consistent-models rules [:=> :p :b]) ;; => rule not tolerated
+    (consistent-models rules [:=> :p [:not :f]]) ;; => rule not tolerated
+    (consistent-models rules [:=> :b :w])
+    (consistent-models rules [:=> :f :a])
+"
+  ([rules [op a b :as rule]]
+     (stmt-to-models (concat [:and [:and a b]]
+			     (clojure.set/difference rules rule)))))
+
+(defn partition-rules
+  "
+****
+
+    (def rules #{[:=> :b :f]
+                 [:=> :p :b]
+                 [:=> :p [:not :f]]
+                 [:=> :b :w]
+                 [:=> :f :a]})
+
+    (partition-rules rules)
+"
+  ([rule-set]
+     (let [f (fn [rs]
+	       (set (filter #(seq (consistent-models rs %))
+			    rs)))]
+       (loop [parts [] rules rule-set]
+         (if (seq rules)
+           (let [new-part (f rules)]
+             (if (seq new-part)
+               (recur (conj parts new-part)
+                      (apply clojure.set/difference rule-set new-part parts))
+               nil))
+           parts)))))
 

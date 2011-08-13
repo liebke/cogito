@@ -137,3 +137,12 @@
   (is (true? (entailed? rules-map :b :a)))
   (is (nil? (entailed? rules-map :p :w)))
   (is (true? (entailed? rules-map ($or :b :p) :f))))
+
+(deftest stmt-to-models-test
+  (is (= (stmt-to-models [:not :a]) ($not :a)))
+  (is (= (stmt-to-models [:and :a :b]) ($and :a :b)))
+  (is (= (stmt-to-models [:or :a :b]) ($or :a :b)))
+  (is (= (stmt-to-models [:=> :a :b]) ($=> :a :b)))
+  (is (= (stmt-to-models [:and [:not :a] :b]) ($and ($not :a) :b)))
+  (is (= (stmt-to-models [:or [:not :a] :b]) ($or ($not :a) :b)))
+  (is (= (stmt-to-models [:or [:and :a :b] [:and :c :d]]) ($or ($and :a :b) ($and :c :d)))))
