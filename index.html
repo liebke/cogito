@@ -2730,8 +2730,8 @@ Generates all models possible for a given rule-set, even inconsistent models.</p
 	     {} models)))</pre></tr><tr><td class="docs">
 <hr />
 </td><td class="codes" /><pre class="brush: clojure">(defn- to-model
-  ([term] (if (keyword? term) [{term true}] term))
-  ([term value] (if (keyword? term) [{term value}] term)))</pre></tr><tr><td class="docs">
+  ([term] (if (keyword? term) #{{term true}} term))
+  ([term value] (if (keyword? term) #{{term value}} term)))</pre></tr><tr><td class="docs">
 <hr />
 </td><td class="codes" /><pre class="brush: clojure">(defn filter-inconsistent-models
   ([&amp; models]
@@ -2798,7 +2798,27 @@ Generates all models possible for a given rule-set, even inconsistent models.</p
       ($or ($and a b)
 	   ($and ($not a)
 		 ($or b ($not b)))))))</pre></tr><tr><td class="docs"><h1>Z-System Internal Functions</h1>
-</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
+</td><td class="codes" /></tr><tr><td class="docs">
+<hr />
+
+<pre><code>(stmt-to-models [:not :a])
+(stmt-to-models [:and :a :b])
+(stmt-to-models [:or :a :b])
+(stmt-to-models [:=&gt; :a :b])
+(stmt-to-models [:and [:not :a] :b])
+(stmt-to-models [:or [:not :a] :b])
+(stmt-to-models [:or [:and :a :b] [:and :c :d]])
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn stmt-to-models
+  ([stmt]
+     (if (keyword? stmt)
+       (to-model stmt)
+       (condp = (first stmt)
+	   :not (apply $not (map #(stmt-to-models %) (rest stmt)))
+	   :and (apply $and (map #(stmt-to-models %) (rest stmt)))
+	   :or (apply $or (map #(stmt-to-models %) (rest stmt)))
+	   :=&gt; (apply $=&gt; (map #(stmt-to-models %) (rest stmt)))
+	   stmt))))</pre></tr><tr><td class="docs"><p><hr />
 Returns the antecedent of the given rule.</p>
 </td><td class="codes" /><pre class="brush: clojure">(defn antecedent
   ([rule] (first rule)))</pre></tr><tr><td class="docs"><p><hr />
@@ -3207,18 +3227,182 @@ Returns a boolean indicating whether the given consequent is entailed from the a
          true
        :else
          false))))</pre></tr><tr><td class="docs"><h1>Experimental functions</h1>
-</td><td class="codes" /></tr><tr><td class="docs"><p><hr />
+</td><td class="codes" /></tr><tr><td class="docs">
+<hr />
+
+<pre><code>(def rules #{[:=&gt; :b :f]
+             [:=&gt; :p :b]
+             [:=&gt; :p [:not :f]]
+             [:=&gt; :b :w]
+             [:=&gt; :f :a]})
+
+(get-vars rules)
+
+
+(def rules2 #{[:=&gt; [:or :b :c] :f]
+             [:=&gt; :p [:and :b :d]]
+             [:=&gt; :p [:not :f]]
+             [:=&gt; :b :w]
+             [:=&gt; :f :a]})
+
+(get-vars rules2)
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn get-vars
+  ([stmts]
+     (letfn [(f [stmt]
+		(if (coll? stmt)
+		  (if (#{:not :and :or :=&gt;} (first stmt))
+		    (map #(f %) (rest stmt))
+		    stmt)
+		  stmt))]
+	     (set (flatten (map f stmts))))))</pre></tr><tr><td class="docs"><p><hr />
 Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.</p>
 
-<pre><code>(find-inconsistent-models [:a :b :c :d :e :f] [:a :b] [:e :f])
+<pre><code>(find-inconsistent-models3 rules [:=&gt; [:and :p :b] [:not :f]] [:=&gt; :b :f])
+
+(find-inconsistent-models3 rules [:=&gt; :p [:not :f]] [:=&gt; :b :f])
+(find-inconsistent-models3 rules [:=&gt; :p :b] [:=&gt; :b :f])
+
+(find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=&gt; :b :f])
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn find-consistent-models
+  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
+     (let [rest-rules (clojure.set/difference rule-set
+					      #{consistent-rule}
+					      #{inconsistent-rule})]
+       (stmt-to-models (concat [:and a b e f] rest-rules)))))</pre></tr><tr><td class="docs"><p><hr />
+    (def rules #{[:=> :b :f]
+                 [:=> :p :b]
+                 [:=> :p [:not :f]]
+                 [:=> :b :w]
+                 [:=> :f :a]})
+    (consistent-models rules [:=> :b :f])
+    (consistent-models rules [:=> :p :b]) ;; => rule not tolerated
+    (consistent-models rules [:=> :p [:not :f]]) ;; => rule not tolerated
+    (consistent-models rules [:=> :b :w])
+    (consistent-models rules [:=> :f :a])</p>
+</td><td class="codes" /><pre class="brush: clojure">(defn consistent-models
+  ([rules [op a b :as rule]]
+     (stmt-to-models (concat [:and [:and a b]]
+			     (clojure.set/difference rules rule)))))</pre></tr><tr><td class="docs">
+<hr />
+
+<pre><code>(def rules-map {[:=&gt; :b :f] 1
+                [:=&gt; :p :b] 1
+                [:=&gt; :p [:not :f]] 1
+                [:=&gt; :b :w] 1
+                [:=&gt; :f :a] 1})
+
+(partition-rules rules-map)0
+
+
+(partition-rules {[:=&gt; :s [:not :w]] 1
+                  [:=&gt; :s :a] 1
+                  [:=&gt; :a :w] 1})
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn partition-rules
+  ([rules-map]
+     (let [rule-set (set (keys rules-map))
+	   f (fn [rs]
+	       (set (filter #(seq (consistent-models rs %))
+			    rs)))]
+       (loop [parts [] rules rule-set]
+         (if (seq rules)
+           (let [new-part (f rules)]
+             (if (seq new-part)
+               (recur (conj parts new-part)
+                      (apply clojure.set/difference rule-set new-part parts))
+               nil))
+           parts)))))</pre></tr><tr><td class="docs"><p><hr />
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.</p>
+
+<pre><code>(find-inconsistent-models rules [:=&gt; :a :b] [:=&gt; :e :f])
+(find-inconsistent-models rules [:=&gt; :p [:not :f]] [:=&gt; :b :f])
+(find-inconsistent-models rules [:=&gt; :p :b] [:=&gt; :b :f])
+
+(find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=&gt; :b :f])
 </code></pre>
 </td><td class="codes" /><pre class="brush: clojure">(defn find-inconsistent-models
-  ([model-vars [a b :as consistent-rule] [e f :as inconsistent-rule]]
-     (let [c-rules #{a b}
-	   i-rules #{e f}
-	   vars (clojure.set/difference (set model-vars) c-rules i-rules)]
-       {[consistent-rule inconsistent-rule]
-	($and ($and a b)
-	      (apply $or vars)
-	      ($and e ($not f)))})))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
+     (let [vars (clojure.set/difference (get-vars rule-set)
+					(get-vars consistent-rule)
+					(get-vars inconsistent-rule))]
+       (stmt-to-models [:and [:and a b]
+			     (concat [:or] vars)
+			[:and e [:not f]]]))))</pre></tr><tr><td class="docs"><p><hr />
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.</p>
+
+<pre><code>(find-inconsistent-models3 rules [:=&gt; [:and :p :b] [:not :f]] [:=&gt; :b :f])
+
+(find-inconsistent-models3 rules [:=&gt; :p [:not :f]] [:=&gt; :b :f])
+(find-inconsistent-models3 rules [:=&gt; :p :b] [:=&gt; :b :f])
+
+(find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=&gt; :b :f])
+</code></pre>
+</td><td class="codes" /><pre class="brush: clojure">(defn find-inconsistent-models3
+  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
+     (let [rest-rules (clojure.set/difference rule-set
+					      #{consistent-rule}
+					      #{inconsistent-rule})]
+       (stmt-to-models (concat [:and a b e [:not f]] rest-rules)))))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn score-rules
+  &quot;
+    (def rules-map {[:=&gt; :b :f] 1
+                    [:=&gt; :p :b] 1
+                    [:=&gt; :p [:not :f]] 1
+                    [:=&gt; :b :w] 1
+                    [:=&gt; :f :a] 1})
+    (def parts (seq (partition-rules rules-map)))
+    (def scored-rules (score-rules rules-map))
+    (apply max (vals (apply merge (map #(when (seq (find-inconsistent-models (keys scored-rules) [:=&gt; [:and :p :b] :f] %)) {% (scored-rules %)}) (keys rules-map)))))
+    (apply max (vals (apply merge (map #(when (seq (find-inconsistent-models (keys scored-rules) [:=&gt; [:and :p :b] [:not :f]] %)) {% (scored-rules %)}) (keys rules-map)))))
+&quot;
+  ([rules-map]
+     (let [[rz &amp; parts] (partition-rules rules-map)
+	   f (fn [rz-plus delta-star]
+		(let [conflicts (apply merge-with conj
+				       (for [ir (seq rz-plus)
+					     cr (seq delta-star)]
+					 (when (seq (find-inconsistent-models rules cr ir))
+					   {cr [ir]})))]
+		  (apply merge rules-map
+			 (map (fn [cr]
+				{cr (+ (rules-map cr)
+				       1
+				       (apply max (map (fn [ir]
+							 (or (rules-map ir) 0))
+						       (conflicts cr))))})
+			      (keys conflicts)))))]
+       (when (seq rz)
+	 (apply merge-with min (map #(f rz %) parts))))))</pre></tr><tr><td class="docs">
+</td><td class="codes" /><pre class="brush: clojure">(defn query-rule
+  &quot;
+    (query-rule scored-rules [:=&gt; [:and :p :b] [:not :f]]) ;; =&gt; 1
+    (query-rule scored-rules [:=&gt; [:and :p :b] :f]) ;; =&gt; 3
+    (query-rule scored-rules [:=&gt; :b [:not :p]]) ;; =&gt; 0
+    (query-rule scored-rules [:=&gt; :b [:not [:not :p]]]) ;; =&gt; 1
+    (query-rule scored-rules [:=&gt; [:and :r :b] :f]) ;; =&gt; 0
+    (query-rule scored-rules [:=&gt; [:and :r :b] [:not :f]]) ;; =&gt; 1
+    (query-rule scored-rules [:=&gt; :b :a]) ;; =&gt; 0
+    (query-rule scored-rules [:=&gt; :b [:not :a]]) ;; =&gt; 1
+    (query-rule scored-rules [:=&gt; :p :w]) ;; =&gt; 1
+    (query-rule scored-rules [:=&gt; :p [:not :w]]) ;; =&gt; 3
+    (def rules2 (score-rules {[:=&gt; :s [:not :w]] 1
+                              [:=&gt; :s :a] 1
+                              [:=&gt; :a :w] 1}))
+    (query-rule rules2 [:=&gt; :a :s])
+    (query-rule rules2 [:=&gt; :a [:not :s]])
+    (query-rule rules2 [:=&gt; [:and :s :a] :w])
+    (query-rule rules2 [:=&gt; [:and :s :a] [:not :w]])
+    (query-rule rules2 [:=&gt; :a :a])
+    (query-rule rules2 [:=&gt; :s :s])
+&quot;
+  ([scored-rules hypothesis]
+     (apply merge-with max
+	    (map #(merge-with max
+			      (when-let [models (seq (find-inconsistent-models3 (set (keys scored-rules)) hypothesis %))]
+				(zipmap models (repeat (count models) (scored-rules %))))
+			      (when-let [consistent-models (seq (find-consistent-models (set (keys scored-rules)) hypothesis %))]
+				(zipmap consistent-models (repeat (count consistent-models) 0))))
+		 (keys scored-rules)))))</pre></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_cogito.core">cogito.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
        SyntaxHighlighter.all()</script></body></html>
