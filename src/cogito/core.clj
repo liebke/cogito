@@ -312,28 +312,32 @@ Generates all models possible for a given rule-set, even inconsistent models."
 ;; Z-System Internal Functions
 ;; =========
 
-(defn stmt-to-models
+(defn find-all-models
   "
 ****
 
-    (stmt-to-models [:not :a])
-    (stmt-to-models [:and :a :b])
-    (stmt-to-models [:or :a :b])
-    (stmt-to-models [:=> :a :b])
-    (stmt-to-models [:and [:not :a] :b])
-    (stmt-to-models [:or [:not :a] :b])
-    (stmt-to-models [:or [:and :a :b] [:and :c :d]])
+    (find-all-models [:not :a])
+    (find-all-models [:and :a :b])
+    (find-all-models [:or :a :b])
+    (find-all-models [:=> :a :b])
+    (find-all-models [:and [:not :a] :b])
+    (find-all-models [:or [:not :a] :b])
+    (find-all-models [:or [:and :a :b] [:and :c :d]])
 
 "
   ([stmt]
      (if (keyword? stmt)
        (to-model stmt)
        (condp = (first stmt)
-	   :not (apply $not (map #(stmt-to-models %) (rest stmt)))
-	   :and (apply $and (map #(stmt-to-models %) (rest stmt)))
-	   :or (apply $or (map #(stmt-to-models %) (rest stmt)))
-	   :=> (apply $=> (map #(stmt-to-models %) (rest stmt)))
+	   :not (apply $not (map #(find-all-models %) (rest stmt)))
+	   :and (apply $and (map #(find-all-models %) (rest stmt)))
+	   :or (apply $or (map #(find-all-models %) (rest stmt)))
+	   :=> (apply $=> (map #(find-all-models %) (rest stmt)))
 	   stmt))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn antecedent
   "
@@ -810,7 +814,8 @@ Returns a boolean indicating whether the given consequent is entailed from the a
        :else
          false))))
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Experimental functions
 ;; ======================
 
@@ -844,7 +849,7 @@ Returns a boolean indicating whether the given consequent is entailed from the a
 		  stmt))]
 	     (set (flatten (map f stmts))))))
 
-(defn consistent-models
+(defn find-models-consistent-with-rule
   "
 ****
     (def rules #{[:=> :b :f]
@@ -852,71 +857,74 @@ Returns a boolean indicating whether the given consequent is entailed from the a
                  [:=> :p [:not :f]]
                  [:=> :b :w]
                  [:=> :f :a]})
-    (consistent-models rules [:=> :b :f])
-    (consistent-models rules [:=> :p :b]) ;; => rule not tolerated
-    (consistent-models rules [:=> :p [:not :f]]) ;; => rule not tolerated
-    (consistent-models rules [:=> :b :w])
-    (consistent-models rules [:=> :f :a])
+
+    (find-models-consistent-with-rule rules [:=> :b :f])
+    (find-models-consistent-with-rule rules [:=> :p :b]) ;; => rule not tolerated
+    (find-models-consistent-with-rule rules [:=> :p [:not :f]]) ;; => rule not tolerated
+    (find-models-consistent-with-rule rules [:=> :b :w])
+    (find-models-consistent-with-rule rules [:=> :f :a])
 "
   ([rules [op a b :as rule]]
-     (stmt-to-models (concat [:and a b] (clojure.set/difference rules rule)))))
+     (find-all-models (concat [:and a b] (clojure.set/difference rules rule)))))
 
-(defn find-inconsistent-models
+(defn find-models-consistent-with-first-rule-not-second
   "
 ****
 Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
 
-    (find-inconsistent-models rules-map [:=> [:and :a :b] :c] [:=> :e :f])
-    (find-inconsistent-models rules-map [:=> :p [:not :f]] [:=> :b :f])
-    (find-inconsistent-models rules-map [:=> :p :b] [:=> :b :f])
+    (def rules-subset (second (partition-rules rules-map)))
 
-    (find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-first-rule-not-second rules-subset [:=> [:and :a :b] :c] [:=> :e :f])
+
+    (find-models-consistent-with-first-rule-not-second rules-subset [:=> :p [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-first-rule-not-second rules-subset [:=> :p :b] [:=> :b :f])
+
+    (find-models-consistent-with-first-rule-not-second rules-subset [:and [:and :p :b] [:not :f]] [:=> :b :f])
 "
-  ([rule-map [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
-     (let [rules-set (set (keys rules-map))
-	   vars (clojure.set/difference (get-vars rules-set)
-					(get-vars consistent-rule)
-					(get-vars inconsistent-rule))] ;; remove? not necessary? an optimization?
-       (stmt-to-models [:and  a b e [:not f] (concat [:or] vars)]))))
+  ([rules-subset [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
+     (let [rules (clojure.set/difference rules-subset
+					 consistent-rule)]
+       (find-all-models (concat [:and a b e [:not f]] rules)))))
 
-(defn find-non-conflicting-models
+(defn find-models-consistent-with-stmt-and-rule
   "
 ****
 Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
 
-    (find-non-conflicting-models rules-map [:=> [:and :p :b] [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-stmt-and-rule rules-map [:=> [:and :p :b] [:not :f]] [:=> :b :f])
 
-    (find-non-conflicting-models rules-map [:=> :p [:not :f]] [:=> :b :f])
-    (find-non-conflicting-models rules-map [:=> :p :b] [:=> :b :f])
+    (find-models-consistent-with-stmt-and-rule rules-map [:=> :p [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-stmt-and-rule rules-map [:=> :p :b] [:=> :b :f])
 
     (find-non-conflicting--models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
 "
   ([rule-map stmt [_ a b :as rule]]
      (let [rules-set (set (keys rules-map))
 	   rest-rules (clojure.set/difference rules-set #{rule})] ;; remove difference, not necessary
-       (stmt-to-models (concat [:and a b stmt] rest-rules)))))
+       (find-all-models (concat [:and stmt a b] rest-rules)))))
 
 
-(defn find-conflicting-models
+(defn find-models-consistent-with-stmt-not-rule
   "
 ****
 Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
 
+    (find-models-consistent-with-stmt-not-rule rules-map [:=> [:and :a :b] :c] [:=> :e :f])
 
-    (find-conflicting-models rules-map [:and :p :w] (first (keys scored-rules)))
+    (find-models-consistent-with-stmt-not-rule rules-map [:=> [:and :p :b] [:not :f]] [:=> :b :f])
 
-    (find-conflicting-models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-stmt-not-rule rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
 
-    (find-conflicting-models rules-map [:and :p [:not :f]] [:=> :b :f])
-    (find-conflicting-models rules-map [:and :p :b] [:=> :b :f])
+    (find-models-consistent-with-stmt-not-rule rules-map [:and :p [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-stmt-not-rule rules-map [:and :p :b] [:=> :b :f])
 
-    (find-conflicting-models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
+    (find-models-consistent-with-stmt-not-rule rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
 
 "
   ([rule-map stmt [_ a b :as rule]]
      (let [rules-set (set (keys rules-map))
 	   rest-rules (clojure.set/difference rules-set #{rule})] ;; remove the difference, not necessary
-       (stmt-to-models (concat [:and a [:not b] stmt] rest-rules)))))
+       (find-all-models (concat [:and stmt a [:not b]] rest-rules)))))
 
 (defn partition-rules
   "
@@ -939,7 +947,7 @@ Finds all the models possible from the model-vars that are consistent with the f
   ([rules-map]
      (let [rule-set (set (keys rules-map))
 	   f (fn [rs]
-	       (set (filter #(seq (consistent-models rs %))
+	       (set (filter #(seq (find-models-consistent-with-rule rs %))
 			    rs)))]
        (loop [parts [] rules rule-set]
          (if (seq rules)
@@ -963,10 +971,11 @@ Finds all the models possible from the model-vars that are consistent with the f
  "
   ([rules-map]
      (let [[rz & parts] (partition-rules rules-map)
+	   var-names (get-vars (keys rules-map))
 	   f (fn [rz-plus delta-star]
 		(let [conflicts (apply merge-with concat
 				  (for [ir (seq rz-plus) cr (seq delta-star)]
-				    (when (seq (find-inconsistent-models rules-map cr ir)) {cr [ir]})))]
+				    (when (seq (find-models-consistent-with-first-rule-not-second delta-star cr ir)) {cr [ir]})))]
 		  (apply merge rules-map
 			 (map (fn [cr] {cr (+ 1 (rules-map cr)
 					      (apply max (map (fn [ir] (or (rules-map ir) 0)) (conflicts cr))))})
@@ -988,6 +997,9 @@ Finds all the models possible from the model-vars that are consistent with the f
 
     (query-hypothesis scored-rules [:and :b :a]) ;; => 0
     (query-hypothesis scored-rules [:and :b [:not :a]]) ;; => 1
+
+    (query-hypothesis scored-rules [:and :p :a]) ;; => 1
+    (query-hypothesis scored-rules [:and :p [:not :a]]) ;; => 1
 
     (query-hypothesis scored-rules [:and :p :w]) ;; => 1
     (query-hypothesis scored-rules [:and :p [:not :w]]) ;; => 3
@@ -1012,9 +1024,9 @@ Finds all the models possible from the model-vars that are consistent with the f
      (let [rule-set (set (keys scored-rules))
 	   f (fn [rule]
 	       (merge-with max
-			   (when-let [models (seq (find-conflicting-models rule-set hypothesis rule))]
+			   (when-let [models (seq (find-models-consistent-with-stmt-not-rule rule-set hypothesis rule))]
 			     (zipmap models (repeat (count models) (scored-rules rule))))
-			   (when-let [consistent-models (seq (find-non-conflicting-models rule-set hypothesis rule))]
+			   (when-let [consistent-models (seq (find-models-consistent-with-stmt-and-rule rule-set hypothesis rule))]
 			     (zipmap consistent-models (repeat (count consistent-models) 0)))))]
        (->> (map f rule-set)
 	    (apply merge-with max)))))
@@ -1032,6 +1044,9 @@ Finds all the models possible from the model-vars that are consistent with the f
 
     (score-hypothesis scored-rules [:and :b :a]) ;; => 0
     (score-hypothesis scored-rules [:and :b [:not :a]]) ;; => 1
+
+    (score-hypothesis scored-rules [:and :p :a]) ;; => 1
+    (score-hypothesis scored-rules [:and :p [:not :a]]) ;; => 1
 
     (score-hypothesis scored-rules [:and :p :w]) ;; => 1
     (score-hypothesis scored-rules [:and :p [:not :w]]) ;; => 3
