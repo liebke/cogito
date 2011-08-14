@@ -844,24 +844,6 @@ Returns a boolean indicating whether the given consequent is entailed from the a
 		  stmt))]
 	     (set (flatten (map f stmts))))))
 
-(defn find-consistent-models
-  "
-****
-Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
-
-    (find-inconsistent-models3 rules [:=> [:and :p :b] [:not :f]] [:=> :b :f])
-
-    (find-inconsistent-models3 rules [:=> :p [:not :f]] [:=> :b :f])
-    (find-inconsistent-models3 rules [:=> :p :b] [:=> :b :f])
-
-    (find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=> :b :f])
-"
-  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
-     (let [rest-rules (clojure.set/difference rule-set
-					      #{consistent-rule}
-					      #{inconsistent-rule})]
-       (stmt-to-models (concat [:and a b e f] rest-rules)))))
-
 (defn consistent-models
   "
 ****
@@ -877,8 +859,64 @@ Finds all the models possible from the model-vars that are consistent with the f
     (consistent-models rules [:=> :f :a])
 "
   ([rules [op a b :as rule]]
-     (stmt-to-models (concat [:and [:and a b]]
-			     (clojure.set/difference rules rule)))))
+     (stmt-to-models (concat [:and a b] (clojure.set/difference rules rule)))))
+
+(defn find-inconsistent-models
+  "
+****
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
+
+    (find-inconsistent-models rules-map [:=> [:and :a :b] :c] [:=> :e :f])
+    (find-inconsistent-models rules-map [:=> :p [:not :f]] [:=> :b :f])
+    (find-inconsistent-models rules-map [:=> :p :b] [:=> :b :f])
+
+    (find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=> :b :f])
+"
+  ([rule-map [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
+     (let [rules-set (set (keys rules-map))
+	   vars (clojure.set/difference (get-vars rules-set)
+					(get-vars consistent-rule)
+					(get-vars inconsistent-rule))] ;; remove? not necessary? an optimization?
+       (stmt-to-models [:and  a b e [:not f] (concat [:or] vars)]))))
+
+(defn find-non-conflicting-models
+  "
+****
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
+
+    (find-non-conflicting-models rules-map [:=> [:and :p :b] [:not :f]] [:=> :b :f])
+
+    (find-non-conflicting-models rules-map [:=> :p [:not :f]] [:=> :b :f])
+    (find-non-conflicting-models rules-map [:=> :p :b] [:=> :b :f])
+
+    (find-non-conflicting--models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
+"
+  ([rule-map stmt [_ a b :as rule]]
+     (let [rules-set (set (keys rules-map))
+	   rest-rules (clojure.set/difference rules-set #{rule})] ;; remove difference, not necessary
+       (stmt-to-models (concat [:and a b stmt] rest-rules)))))
+
+
+(defn find-conflicting-models
+  "
+****
+Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
+
+
+    (find-conflicting-models rules-map [:and :p :w] (first (keys scored-rules)))
+
+    (find-conflicting-models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
+
+    (find-conflicting-models rules-map [:and :p [:not :f]] [:=> :b :f])
+    (find-conflicting-models rules-map [:and :p :b] [:=> :b :f])
+
+    (find-conflicting-models rules-map [:and [:and :p :b] [:not :f]] [:=> :b :f])
+
+"
+  ([rule-map stmt [_ a b :as rule]]
+     (let [rules-set (set (keys rules-map))
+	   rest-rules (clojure.set/difference rules-set #{rule})] ;; remove the difference, not necessary
+       (stmt-to-models (concat [:and a [:not b] stmt] rest-rules)))))
 
 (defn partition-rules
   "
@@ -890,7 +928,7 @@ Finds all the models possible from the model-vars that are consistent with the f
                     [:=> :b :w] 1
                     [:=> :f :a] 1})
 
-    (partition-rules rules-map)0
+    (partition-rules rules-map)
 
 
     (partition-rules {[:=> :s [:not :w]] 1
@@ -912,43 +950,6 @@ Finds all the models possible from the model-vars that are consistent with the f
                nil))
            parts)))))
 
-(defn find-inconsistent-models
-  "
-****
-Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
-
-    (find-inconsistent-models rules [:=> :a :b] [:=> :e :f])
-    (find-inconsistent-models rules [:=> :p [:not :f]] [:=> :b :f])
-    (find-inconsistent-models rules [:=> :p :b] [:=> :b :f])
-
-    (find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=> :b :f])
-"
-  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
-     (let [vars (clojure.set/difference (get-vars rule-set)
-					(get-vars consistent-rule)
-					(get-vars inconsistent-rule))]
-       (stmt-to-models [:and [:and a b]
-			     (concat [:or] vars)
-			[:and e [:not f]]]))))
-
-(defn find-inconsistent-models3
-  "
-****
-Finds all the models possible from the model-vars that are consistent with the first rule and inconsistent with the second.
-
-    (find-inconsistent-models3 rules [:=> [:and :p :b] [:not :f]] [:=> :b :f])
-
-    (find-inconsistent-models3 rules [:=> :p [:not :f]] [:=> :b :f])
-    (find-inconsistent-models3 rules [:=> :p :b] [:=> :b :f])
-
-    (find-inconsistent-models rules [:and [:and :p :b] [:not :f]] [:=> :b :f])
-"
-  ([rule-set [_ a b :as consistent-rule] [_ e f :as inconsistent-rule]]
-     (let [rest-rules (clojure.set/difference rule-set
-					      #{consistent-rule}
-					      #{inconsistent-rule})]
-       (stmt-to-models (concat [:and a b e [:not f]] rest-rules)))))
-
 (defn score-rules
   "
     (def rules-map {[:=> :b :f] 1
@@ -957,71 +958,97 @@ Finds all the models possible from the model-vars that are consistent with the f
                     [:=> :b :w] 1
                     [:=> :f :a] 1})
 
-    (def parts (seq (partition-rules rules-map)))
     (def scored-rules (score-rules rules-map))
 
-    (apply max (vals (apply merge (map #(when (seq (find-inconsistent-models (keys scored-rules) [:=> [:and :p :b] :f] %)) {% (scored-rules %)}) (keys rules-map)))))
-    (apply max (vals (apply merge (map #(when (seq (find-inconsistent-models (keys scored-rules) [:=> [:and :p :b] [:not :f]] %)) {% (scored-rules %)}) (keys rules-map)))))
-
-"
+ "
   ([rules-map]
      (let [[rz & parts] (partition-rules rules-map)
 	   f (fn [rz-plus delta-star]
-		(let [conflicts (apply merge-with conj
-				       (for [ir (seq rz-plus)
-					     cr (seq delta-star)]
-					 (when (seq (find-inconsistent-models rules cr ir))
-					   {cr [ir]})))]
+		(let [conflicts (apply merge-with concat
+				  (for [ir (seq rz-plus) cr (seq delta-star)]
+				    (when (seq (find-inconsistent-models rules-map cr ir)) {cr [ir]})))]
 		  (apply merge rules-map
-			 (map (fn [cr]
-				{cr (+ (rules-map cr)
-				       1
-				       (apply max (map (fn [ir]
-							 (or (rules-map ir) 0))
-						       (conflicts cr))))})
+			 (map (fn [cr] {cr (+ 1 (rules-map cr)
+					      (apply max (map (fn [ir] (or (rules-map ir) 0)) (conflicts cr))))})
 			      (keys conflicts)))))]
        (when (seq rz)
 	 (apply merge-with min (map #(f rz %) parts))))))
 
 
-(defn query-rule
+(defn query-hypothesis
   "
-    (query-rule scored-rules [:=> [:and :p :b] [:not :f]]) ;; => 1
-    (query-rule scored-rules [:=> [:and :p :b] :f]) ;; => 3
+    (query-hypothesis scored-rules [:and [:and :p :b] [:not :f]]) ;; => 1
+    (query-hypothesis scored-rules [:and [:and :p :b] :f]) ;; => 3
 
-    (query-rule scored-rules [:=> :b [:not :p]]) ;; => 0
-    (query-rule scored-rules [:=> :b [:not [:not :p]]]) ;; => 1
+    (query-hypothesis scored-rules [:and :b [:not :p]]) ;; => 0
+    (query-hypothesis scored-rules [:and :b [:not [:not :p]]]) ;; => 1
 
-    (query-rule scored-rules [:=> [:and :r :b] :f]) ;; => 0
-    (query-rule scored-rules [:=> [:and :r :b] [:not :f]]) ;; => 1
+    (query-hypothesis scored-rules [:and [:and :r :b] :f]) ;; => 0
+    (query-hypothesis scored-rules [:and [:and :r :b] [:not :f]]) ;; => 1
 
-    (query-rule scored-rules [:=> :b :a]) ;; => 0
-    (query-rule scored-rules [:=> :b [:not :a]]) ;; => 1
+    (query-hypothesis scored-rules [:and :b :a]) ;; => 0
+    (query-hypothesis scored-rules [:and :b [:not :a]]) ;; => 1
 
-    (query-rule scored-rules [:=> :p :w]) ;; => 1
-    (query-rule scored-rules [:=> :p [:not :w]]) ;; => 3
+    (query-hypothesis scored-rules [:and :p :w]) ;; => 1
+    (query-hypothesis scored-rules [:and :p [:not :w]]) ;; => 3
 
     (def rules2 (score-rules {[:=> :s [:not :w]] 1
                               [:=> :s :a] 1
                               [:=> :a :w] 1}))
 
-    (query-rule rules2 [:=> :a :s])
-    (query-rule rules2 [:=> :a [:not :s]])
+    (query-hypothesis rules2 [:and :a :s]) ;; => 1
+    (query-hypothesis rules2 [:and :a [:not :s]]) ;; => 0
 
-    (query-rule rules2 [:=> [:and :s :a] :w])
-    (query-rule rules2 [:=> [:and :s :a] [:not :w]])
+    (query-hypothesis rules2 [:and [:and :s :a] :w]) ;; => 3
+    (query-hypothesis rules2 [:and [:and :s :a] [:not :w]]) ;; => 1
 
-    (query-rule rules2 [:=> :a :a])
-    (query-rule rules2 [:=> :s :s])
+    (query-hypothesis rules2 [{:a true}])
+    (query-hypothesis rules2 [:not :a]) 
 
 
 
 "
   ([scored-rules hypothesis]
-     (apply merge-with max
-	    (map #(merge-with max
-			      (when-let [models (seq (find-inconsistent-models3 (set (keys scored-rules)) hypothesis %))]
-				(zipmap models (repeat (count models) (scored-rules %))))
-			      (when-let [consistent-models (seq (find-consistent-models (set (keys scored-rules)) hypothesis %))]
-				(zipmap consistent-models (repeat (count consistent-models) 0))))
-		 (keys scored-rules)))))
+     (let [rule-set (set (keys scored-rules))
+	   f (fn [rule]
+	       (merge-with max
+			   (when-let [models (seq (find-conflicting-models rule-set hypothesis rule))]
+			     (zipmap models (repeat (count models) (scored-rules rule))))
+			   (when-let [consistent-models (seq (find-non-conflicting-models rule-set hypothesis rule))]
+			     (zipmap consistent-models (repeat (count consistent-models) 0)))))]
+       (->> (map f rule-set)
+	    (apply merge-with max)))))
+
+(defn score-hypothesis
+  "
+    (score-hypothesis scored-rules [:and [:and :p :b] [:not :f]]) ;; => 1
+    (score-hypothesis scored-rules [:and [:and :p :b] :f]) ;; => 3
+
+    (score-hypothesis scored-rules [:and :b [:not :p]]) ;; => 0
+    (score-hypothesis scored-rules [:and :b [:not [:not :p]]]) ;; => 1
+
+    (score-hypothesis scored-rules [:and [:and :r :b] :f]) ;; => 0
+    (score-hypothesis scored-rules [:and [:and :r :b] [:not :f]]) ;; => 1
+
+    (score-hypothesis scored-rules [:and :b :a]) ;; => 0
+    (score-hypothesis scored-rules [:and :b [:not :a]]) ;; => 1
+
+    (score-hypothesis scored-rules [:and :p :w]) ;; => 1
+    (score-hypothesis scored-rules [:and :p [:not :w]]) ;; => 3
+
+
+    (def rules2 (score-rules {[:=> :s [:not :w]] 1
+                              [:=> :s :a] 1
+                              [:=> :a :w] 1}))
+
+    (score-hypothesis rules2 [:and :a :s]) ;; => 1
+    (score-hypothesis rules2 [:and :a [:not :s]]) ;; => 0
+
+    (score-hypothesis rules2 [:and [:and :s :a] :w]) ;; => 3
+    (score-hypothesis rules2 [:and [:and :s :a] [:not :w]]) ;; => 1
+
+"
+  ([scored-rules hypothesis]
+     (->> (query-hypothesis scored-rules hypothesis)
+	  vals
+	  (apply min))))
