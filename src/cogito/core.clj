@@ -146,8 +146,6 @@ This is a known area of weakness for System-Z+, it cannot decide whether penguin
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
-(def LOGICAL-OPERATORS #{:not :and :or :=>})
-
 (defn merge-truth-values
   "
 ****
@@ -155,13 +153,6 @@ This is a known area of weakness for System-Z+, it cannot decide whether penguin
   ([& models]
      (reduce #(merge-with (fn [val1 val2] (if (not= val1 val2) :inconsistent val1)) %1 %2)
 	     {} models)))
-
-(defn filter-inconsistent-models
-  "
-****
-"
-  ([& models]
-     (filter #(-> % vals set :inconsistent not) models)))
 
 (defn to-model
   "
@@ -177,6 +168,7 @@ Generates all models possible for a given set of logical variables, even inconsi
   ([vars]
      (let [truth-vals (comb/selections [true false] (count vars))]
        (map #(zipmap vars %) truth-vals))))
+
 
 ;; Logical Operation Functions
 ;; ===========================
@@ -222,7 +214,7 @@ Generates all models possible for a given set of logical variables, even inconsi
 "
   ([term & terms]
      (reduce (fn [a b]
-	       (apply filter-inconsistent-models
+	       (filter #(-> % vals set :inconsistent not)
 		      (map #(apply merge-truth-values %)
 			   (comb/cartesian-product (to-model a) (to-model b)))))
 	     term terms)))
@@ -255,14 +247,9 @@ Generates all models possible for a given set of logical variables, even inconsi
 "
   ([term & terms]
      (reduce (fn [a b]
-	       (let [a (to-model a)
-		     b (to-model b)]
-		 (apply filter-inconsistent-models
-			(map #(apply merge-truth-values %)
-			     (concat
-			      (comb/cartesian-product a b)
-			      (comb/cartesian-product a ($not b))
-			      (comb/cartesian-product ($not a) b))))))
+	       (concat ($and a b)
+		       ($and a ($not b))
+		       ($and ($not a) b)))
 	     term terms)))
 
 (defn $=>
@@ -270,15 +257,10 @@ Generates all models possible for a given set of logical variables, even inconsi
 ****
 "
   ([a b]
-    (let [a (to-model a)
-	  b (to-model b)]
-      ($or ($and a b)
-	   ($not a)))))
+     ($or ($and a b)
+	  ($not a))))
 
-(def LOGICAL-FUNCTIONS-MAP {:not $not, :and $and, :or $or, :=> $=>})
-
-;; Z-System Internal Functions
-;; =========
+(def logical-functions {:not $not, :and $and, :or $or, :=> $=>})
 
 (defn find-all-models
   "
@@ -296,45 +278,25 @@ Generates all models possible for a given set of logical variables, even inconsi
   ([stmt]
      (if (keyword? stmt)
        (to-model stmt)
-       (if (LOGICAL-OPERATORS (first stmt))
-	   (apply (LOGICAL-FUNCTIONS-MAP (first stmt)) (map #(find-all-models %) (rest stmt)))
+       (if-let [op (logical-functions (first stmt))]
+	   (apply op (map #(find-all-models %) (rest stmt)))
 	   stmt))))
 
 
+;; Performance Notes
+;; =================
+
+;; Disjunction is much more expensive than conjunction, it's best to use alternative conjunction-based representations when possible.
+;; Below is an example of equivalent statements, transformed by De Morgan's law, the conjunction-based version is nearly x600 faster.
+
+;;    (time (count (find-all-models [:not [:or :a :b :c :d :e :f :g :h :i :j :k]])))
+;;    => "Elapsed time: 574.026 msecs"
+;;  
+;;    (time (count (find-all-models [:and [:not :a] [:not :b] [:not :c] [:not :d] [:not :e] [:not :f] [:not :g] [:not :h] [:not :i] [:not :j] [:not :k]])))
+;;    => "Elapsed time: 0.914 msecs"
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Experimental functions
-;; ======================
-
-(defn get-vars
-  "
-****
-
-    (def rules #{[:=> :b :f]
-                 [:=> :p :b]
-                 [:=> :p [:not :f]]
-                 [:=> :b :w]
-                 [:=> :f :a]})
-
-    (get-vars rules)
-
-
-    (def rules2 #{[:=> [:or :b :c] :f]
-                 [:=> :p [:and :b :d]]
-                 [:=> :p [:not :f]]
-                 [:=> :b :w]
-                 [:=> :f :a]})
-
-    (get-vars rules2)
-"
-  ([stmts]
-     (letfn [(f [stmt]
-		(if (coll? stmt)
-		  (if (LOGICAL-OPERATORS (first stmt))
-		    (map #(f %) (rest stmt))
-		    stmt)
-		  stmt))]
-	     (set (flatten (map f stmts))))))
 
 (defn partition-rules
   "
@@ -372,6 +334,37 @@ Generates all models possible for a given set of logical variables, even inconsi
                nil))
            parts)))))
 
+(defn find-conflicting-rules
+  ""
+  ([rules-part1 rules-part2]
+     (apply merge-with concat
+			    (for [[_ e f :as ir] rules-part1
+				  [_ a b :as cr] rules-part2]
+			      (when (-> [:and a b e [:not f]]
+					(concat rules-part2)
+					find-all-models
+					seq)
+				{cr [ir]})))))
+
+(defn update-rules-map
+  "
+Updates the score in the rules-map based on the z-plus-order algorithm.
+
+**Examples**
+
+    (def parts (partition-rules rules-map))
+    (update-rules-map rules-map (first parts) (second parts))
+
+"
+  ([rules-map rules-part1 rules-part2]
+     (let [conflicts (find-conflicting-rules rules-part1 rules-part2)]
+       (apply merge rules-map
+	      (map (fn [cr]
+		     {cr (+ 1 (rules-map cr)
+			    (apply max (map (fn [ir] (or (rules-map ir) 0))
+					    (conflicts cr))))})
+		   (keys conflicts))))))
+
 (defn score-rules
   "
 ****
@@ -395,20 +388,11 @@ This compiled-rules map can be passed to the query function as an alternative to
 
  "
   ([rules-map]
-     (let [[rz & parts] (partition-rules rules-map)
-	   var-names (get-vars (keys rules-map))
-	   f (fn [rz-plus delta-star]
-		(let [conflicts (apply merge-with concat
-				       (for [[_ e f :as ir] (seq rz-plus)
-					     [_ a b :as cr] (seq delta-star)]
-					 (when (seq (find-all-models (concat [:and a b e [:not f]] delta-star)))
-					   {cr [ir]})))]
-		  (apply merge rules-map
-			 (map (fn [cr] {cr (+ 1 (rules-map cr)
-					      (apply max (map (fn [ir] (or (rules-map ir) 0)) (conflicts cr))))})
-			      (keys conflicts)))))]
-       (when (seq rz)
-	 (apply merge-with min (map #(f rz %) parts))))))
+     (when-let [[part0 & parts] (map seq (partition-rules rules-map))]
+       (:scores (reduce (fn [{:keys [scores updated-rules]} part]
+			  {:scores (update-rules-map scores updated-rules part)
+			   :updated-rules (concat updated-rules part)})
+			{:scores rules-map, :updated-rules part0} parts)))))
 
 
 (defn score-models-for-hypothesis
@@ -417,6 +401,14 @@ This compiled-rules map can be passed to the query function as an alternative to
 For a given hypothesis, score each model that is consistent with it based on the score associated with each rule it violates.
 
 **Examples**
+
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
+
+    (def scored-rules (score-rules rules-map))
 
     (score-models-for-hypothesis scored-rules [:and [:and :p :b] [:not :f]]) ;; => 1
     (score-models-for-hypothesis scored-rules [:and [:and :p :b] :f]) ;; => 3
@@ -470,7 +462,15 @@ For a given hypothesis, score each model that is consistent with it based on the
 	    (apply merge-with max model-scores)))))
 
  (defn score-hypothesis
-  "
+   "
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
+
+    (def scored-rules (score-rules rules-map))
+
     (score-hypothesis scored-rules [:and [:and :p :b] [:not :f]]) ;; => 1
     (score-hypothesis scored-rules [:and [:and :p :b] :f]) ;; => 3
 
@@ -500,8 +500,9 @@ For a given hypothesis, score each model that is consistent with it based on the
     (score-hypothesis scored-rules2 [:and [:and :s :a] :w]) ;; => 3
     (score-hypothesis scored-rules2 [:and [:and :s :a] [:not :w]]) ;; => 1
 
-"
-  ([scored-rules hypothesis]
+
+ "
+   ([scored-rules hypothesis]
      (->> (score-models-for-hypothesis scored-rules hypothesis)
 	  vals
 	  (apply min))))
@@ -609,7 +610,7 @@ Returns a map of scores for the valid hypotheses associated with the given antec
           {:f false, :b true, :p true} 1,
           {:p true, :b false, :f true} 3,
           {:f false, :b true, :p false} 1,
-          {:f false, :b false, :p true} 3}
+          {:f false, :b false, :p true}} 3
 
 "
   ([rules antecedent consequent]))
