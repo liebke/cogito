@@ -146,14 +146,6 @@ This is a known area of weakness for System-Z+, it cannot decide whether penguin
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
-(defn merge-truth-values
-  "
-****
-"
-  ([& models]
-     (reduce #(merge-with (fn [val1 val2] (if (not= val1 val2) :inconsistent val1)) %1 %2)
-	     {} models)))
-
 (defn to-model
   "
 ****
@@ -169,6 +161,13 @@ Generates all models possible for a given set of logical variables, even inconsi
      (let [truth-vals (comb/selections [true false] (count vars))]
        (map #(zipmap vars %) truth-vals))))
 
+(defn merge-truth-values
+  "
+****
+"
+  ([& models]
+     (reduce #(merge-with (fn [val1 val2] (if (not= val1 val2) :inconsistent val1)) %1 %2)
+	     {} models)))
 
 ;; Logical Operation Functions
 ;; ===========================
@@ -246,19 +245,14 @@ Generates all models possible for a given set of logical variables, even inconsi
 
 "
   ([term & terms]
-     (reduce (fn [a b]
-	       (concat ($and a b)
-		       ($and a ($not b))
-		       ($and ($not a) b)))
+     (reduce (fn [a b] (concat ($and a b) ($and a ($not b)) ($and ($not a) b)))
 	     term terms)))
 
 (defn $=>
   "
 ****
 "
-  ([a b]
-     ($or ($and a b)
-	  ($not a))))
+  ([a b] ($or ($and a b) ($not a))))
 
 (def logical-functions {:not $not, :and $and, :or $or, :=> $=>})
 
@@ -338,13 +332,13 @@ Generates all models possible for a given set of logical variables, even inconsi
   ""
   ([rules-part1 rules-part2]
      (apply merge-with concat
-			    (for [[_ e f :as ir] rules-part1
-				  [_ a b :as cr] rules-part2]
-			      (when (-> [:and a b e [:not f]]
-					(concat rules-part2)
-					find-all-models
-					seq)
-				{cr [ir]})))))
+	    (for [[_ e f :as ir] rules-part1
+		  [_ a b :as cr] rules-part2]
+	      (when (-> [:and a b e [:not f]]
+			(concat rules-part2)
+			find-all-models
+			seq)
+		{cr [ir]})))))
 
 (defn update-rules-map
   "
@@ -524,11 +518,11 @@ This compiled-rules map can be passed to the query function as an alternative to
 
 **Examples**
 
-    (def rules-map {[:b :f] 1
-                    [:p :b] 1
-                    [:p [:not :f]] 1
-                    [:b :w] 1
-                    [:f :a] 1})
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
 
     (compile-rules rules-map)
 
@@ -542,69 +536,72 @@ Given either an uncompiled or compiled rules map and a series of hypothetical mo
 
 **Examples**
 
-    (def rules-map {[:b :f] 1
-                    [:p :b] 1
-                    [:p [:not :f]] 1
-                    [:b :w] 1
-                    [:f :a] 1})
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
 
-    (def compiled-rules (compile-rules rules-map))
+    (def scored-rules (score-rules rules-map))
 
     ;; penguins ^ birds -> fly
-    (query compiled-rules
-           {:p true, :b true, :f true}
-           {:p true, :b true, :f false})
+    (query scored-rules
+           [:and :p :b :f]
+           [:and :p :b [:not :f]])
 
     ;; birds -> not penguins
-    (query compiled-rules
-           {:b true, :p true}
-           {:b true, :p false})
+    (query scored-rules
+           [:and :b :p]
+           [:and :b [:not :p]])
 
     ;; red ^ birds -> fly
-    (query compiled-rules
-           {:r true, :b true, :f true}
-           {:r true, :b true, :f false})
+    (query scored-rules
+           [:and :r :b :f]
+           [:and :r :b [:not :f]])
 
     ;; birds -> airborn
-    (query compiled-rules
-           {:b true, :a true}
-           {:b true, :a false})
+    (query scored-rules
+           [:and :b :a]
+           [:and :b [:not :a]])
 
     ;; undecided
-    (query compiled-rules
-           {:p true, :w true}
-           {:p true, :w false})
+    (query scored-rules
+           [:and :p :w]
+           [:and :p [:not :w]])
 
 "
-  ([rules-map & hypotheses]))
+  ([scored-rules-map & hypotheses]
+     (reduce #(assoc %1 %2 (score-hypothesis scored-rules-map %2)) {} hypotheses)))
 
 (defn entailed
   "
 ****
 Returns a map of scores for the valid hypotheses associated with the given antecedent and consequent.
 
-    (def rules {[:b :f] 1
-                [:p :b] 1
-                [:p [:not :f]] 1
-                [:b :w] 1
-                [:f :a] 1})
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
 
-    (entailed rules ($and :p :b) :f)
+    (def scored-rules (score-rules rules-map))
+
+    (entailed scored-rules [:and :p :b] :f)
     ;;=> {{:b true, :p true, :f true} 3, {:f false, :p true, :b true} 1}
 
-    (entailed rules :b ($not :p))
+    (entailed scored-rules :b [:not :p])
     ;;=> {{:p true, :b true} 1, {:b true, :p false} 0}
 
-    (entailed rules ($and :r :b) :f)
+    (entailed scored-rules [:and :r :b] :f)
     ;;=> {{:b true, :r true, :f true} 0, {:f false, :r true, :b true} 1}
 
-    (entailed rules :b :a)
+    (entailed scored-rules :b :a)
     ;;=> {{:a false, :b true} 1, {:b true, :a true} 0}
 
-    (entailed rules :p :w)
+    (entailed scored-rules :p :w)
     ;;=> {{:w false, :p true} 1, {:p true, :w true} 1}
 
-    (entailed rules ($or :b :p) :f)
+    (entailed rules [:or :b :p] :f)
     ;;=> {{:p true, :b true, :f true} 3,
           {:p false, :b true, :f true} 0,
           {:f false, :b true, :p true} 1,
@@ -613,37 +610,38 @@ Returns a map of scores for the valid hypotheses associated with the given antec
           {:f false, :b false, :p true}} 3
 
 "
-  ([rules antecedent consequent]))
+  ([rules antecedent consequent]
+     (query scored-rules [:and antecedent consequent] [:and antecedent [:not consequent]])))
 
 (defn entailed?
   "
 ****
 Returns a boolean indicating whether the given consequent is entailed from the antecendent and rules.
 
-    (def rules {[:b :f] 1
-                [:p :b] 1
-                [:p [:not :f]] 1
-                [:b :w] 1
-                [:f :a] 1})
+    (def rules-map {[:=> :b :f] 1
+                    [:=> :p :b] 1
+                    [:=> :p [:not :f]] 1
+                    [:=> :b :w] 1
+                    [:=> :f :a] 1})
 
-    (entailed? rules ($and :p :b) :f) ;;=> false
+    (def scored-rules (score-rules rules-map))
 
-    (entailed? rules :b ($not :p)) ;;=> true
+    (entailed? scored-rules [:and :p :b] :f) ;;=> false
 
-    (entailed? rules ($and :r :b) :f) ;;=> true
+    (entailed? scored-rules :b [:not :p]) ;;=> true
 
-    (entailed? rules :b :a) ;;=> true
+    (entailed? scored-rules [:and :r :b] :f) ;;=> true
 
-    (entailed? rules :p :w) ;;=> nil
+    (entailed? scored-rules :b :a) ;;=> true
 
-    (entailed? rules ($or :b :p) :f) ;;=> true
+    (entailed? scored-rules :p :w) ;;=> nil
+
+    (entailed? scored-rules [:or :b :p] :f) ;;=> true
 
 "
-  ([rules antecedent consequent]
-    (let [a (to-model antecedent)
-	  b (to-model consequent)
-	  h0 (apply min (vals (apply query rules ($and a ($not b)))))
-	  h1 (apply min (vals (apply query rules ($and a b))))]
+  ([scored-rules antecedent consequent]
+     (let [h0 (score-hypothesis scored-rules [:and antecedent [:not consequent]])
+	   h1 (score-hypothesis scored-rules [:and antecedent consequent])]
       (cond
        (= h0 h1)
          nil
