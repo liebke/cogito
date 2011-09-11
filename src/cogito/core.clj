@@ -146,9 +146,28 @@ This is a known area of weakness for System-Z+, it cannot decide whether penguin
 "
   (:require [clojure.contrib.combinatorics :as comb]))
 
-(defn to-model
+
+;; The logical statement :a can be represented by the model {:a true}.
+
+;; The logical statement [:not :a] can be represented by the model {:a false}.
+
+;; The logical statment [:and :a :b] can be represented by the model {:a true, :b true}, which is a model where both :a and :b are true.
+
+;; The logical statement [:or :a :b] cannot be represented by a single model, there are actually three models where this statement is true: [{:a true, :b true}, {:a true, :b false}, {:a false, :b true}].
+
+;; The logical statement [:not [:and :a :b]] can be represented by the models: [{:a true, :b false}, {:a false, :b true}, {:a false, :b false}], which are all the possible models for the variables :a and :b except {:a true, :b true}. This model is equivalent to [:or [:not :a] [:not :b]] by De Morgan's Law.
+
+;; the logical implication statement [:=> :a :b] can be represented by the logical statement [:or [:and :a :b] [:not :a]] and the models: [{:a true, b: true}, {:a false, :b true}, {:a false, :b false}]
+
+;; A rule-set is the conjunction of one or more implication statments: [:and [:=> :s [:not :w]] [:=> :s :a] [:=> :a :w]]
+
+
+(defn to-model-set
   "
 ****
+A model-set is a sequence of model maps, each representing the truth-values for a set of variables, where all the model maps are consistent with each for a given logical statement.
+
+Takes either a model-set (just a sequence of model maps) or a keyword and returns a model-set. A model-set represents all the true models for a given statement.
 "
   ([term] (if (keyword? term) #{{term true}} term))
   ([term value] (if (keyword? term) #{{term value}} term)))
@@ -164,8 +183,10 @@ Generates all models possible for a given set of logical variables, even inconsi
 (defn merge-truth-values
   "
 ****
+Takes a seq of model maps and merges them together, inserting the value :inconsistent if two or more maps have different values for the same key
+
 "
-  ([& models]
+  ([models]
      (reduce #(merge-with (fn [val1 val2] (if (not= val1 val2) :inconsistent val1)) %1 %2)
 	     {} models)))
 
@@ -175,6 +196,8 @@ Generates all models possible for a given set of logical variables, even inconsi
 (defn $not
   "
 ****
+Returns a sequence of all possible model maps for the variables in the given model-set, except for those in the given model-set.
+
 **Examples**
 
     ($not :a)
@@ -183,15 +206,18 @@ Generates all models possible for a given set of logical variables, even inconsi
     ($not [{:a true, :b true}])
     ;; => #{{:b false, :a false} {:b false, :a true} {:b true, :a false}}
 "
-  ([term]
-     (if (keyword? term)
-       (to-model term false)
-       (seq (clojure.set/difference (set (generate-all-models-for-vars (keys (first term))))
-				    (set term))))))
+  ([model-set]
+     (if (keyword? model-set)
+       (to-model-set model-set false)
+       (seq (clojure.set/difference (set (generate-all-models-for-vars (keys (first model-set))))
+				    (set model-set))))))
 
 (defn $and
   "
 ****
+Returns the conjunction of two model-sets, which is the merger of each pair from the cartesian product of all the maps in the two model-sets, where the merger returns a consistent result (i.e. no two values from each pair are contradictory).
+
+
 **Examples**
 
     ($and ($not :a) ($not :b))
@@ -211,16 +237,18 @@ Generates all models possible for a given set of logical variables, even inconsi
 
 
 "
-  ([term & terms]
+  ([model-set & model-sets]
      (reduce (fn [a b]
 	       (filter #(-> % vals set :inconsistent not)
-		      (map #(apply merge-truth-values %)
-			   (comb/cartesian-product (to-model a) (to-model b)))))
-	     term terms)))
+		       (map #(merge-truth-values %)
+			    (comb/cartesian-product (to-model-set a) (to-model-set b)))))
+	     model-set model-sets)))
 
 (defn $or
   "
 ****
+
+
 **Examples**
 
     ($or :a :b)
@@ -244,15 +272,15 @@ Generates all models possible for a given set of logical variables, even inconsi
 
 
 "
-  ([term & terms]
+  ([model-set & model-sets]
      (reduce (fn [a b] (concat ($and a b) ($and a ($not b)) ($and ($not a) b)))
-	     term terms)))
+	     model-set model-sets)))
 
 (defn $=>
   "
 ****
 "
-  ([a b] ($or ($and a b) ($not a))))
+  ([antecedent consequent] ($or ($and antecedent consequent) ($not antecedent))))
 
 (def logical-functions {:not $not, :and $and, :or $or, :=> $=>})
 
@@ -269,12 +297,12 @@ Generates all models possible for a given set of logical variables, even inconsi
     (find-all-models [:or [:and :a :b] [:and :c :d]])
 
 "
-  ([stmt]
-     (if (keyword? stmt)
-       (to-model stmt)
-       (if-let [op (logical-functions (first stmt))]
-	   (apply op (map #(find-all-models %) (rest stmt)))
-	   stmt))))
+  ([wff]
+     (if (keyword? wff)
+       (to-model-set wff)
+       (if-let [op (logical-functions (first wff))]
+	   (apply op (map #(find-all-models %) (rest wff)))
+	   wff))))
 
 
 ;; Performance Notes
@@ -312,16 +340,17 @@ Generates all models possible for a given set of logical variables, even inconsi
 "
   ([rules-map]
      (let [rule-set (set (keys rules-map))
-	   f (fn [rs]
-	       (set (filter (fn [[_ a b :as rule]]
-			      (-> [:and a b]
-				  (concat (clojure.set/difference rs #{rule}))
-				  find-all-models
-				  seq))
-			    rs)))]
+	   find-consistent-models (fn [rs [_ a b :as rule]]
+				    (-> [:and a b]
+					(concat (clojure.set/difference rs #{rule}))
+					find-all-models
+					seq))
+	   find-tolerated-rules (fn [rs]
+				  (set (filter (partial find-consistent-models rs)
+					       rs)))]
        (loop [parts [] rules rule-set]
          (if (seq rules)
-           (let [new-part (f rules)]
+           (let [new-part (find-tolerated-rules rules)]
              (if (seq new-part)
                (recur (conj parts new-part)
                       (apply clojure.set/difference rule-set new-part parts))
@@ -426,6 +455,9 @@ For a given hypothesis, score each model that is consistent with it based on the
                                      [:=> :s :a] 1
                                      [:=> :a :w] 1}))
 
+    (score-models-for-hypothesis scored-rules2 :a)
+    (score-models-for-hypothesis scored-rules2 :s)
+
     (score-models-for-hypothesis scored-rules2 [:and :a :s]) ;; => 1
     (score-models-for-hypothesis rules2 [:and :a [:not :s]]) ;; => 0
 
@@ -435,7 +467,19 @@ For a given hypothesis, score each model that is consistent with it based on the
     (score-models-for-hypothesis rules2 [{:a true}])
     (score-models-for-hypothesis rules2 [:not :a]) 
 
+    ;;
+    (def scored-rules3 (score-rules {[:=> :tk :cs] 1, [:=> [:and :tk :bd] [:not :cs]] 1}))
 
+    (score-models-for-hypothesis scored-rules3 [:and [:not :bd] :tk :cs]) ;; => 0
+    (score-models-for-hypothesis scored-rules3 [:and [:not :bd] [:not :tk] [:not :cs]]) ;; => 0
+    (score-models-for-hypothesis scored-rules3 [:and [:not :bd] [:not :tk] :cs]) ;; => 0
+    (score-models-for-hypothesis scored-rules3 [:and :bd [:not :tk] :cs]) ;; => 0
+    (score-models-for-hypothesis scored-rules3 [:and :bd [:not :tk] [:not :cs]]) ;; => 0
+
+      (score-models-for-hypothesis scored-rules3 [:and [:not :bd] :tk [:not :cs]]) ;; => 1
+    (score-models-for-hypothesis scored-rules3 [:and :bd :tk [:not :cs]]) ;; => 1
+
+    (score-models-for-hypothesis scored-rules3 [:and :bd :tk :cs]) ;; => 3
 
 "
   ([scored-rules hypothesis]
@@ -495,6 +539,16 @@ For a given hypothesis, score each model that is consistent with it based on the
     (score-hypothesis scored-rules2 [:and [:and :s :a] [:not :w]]) ;; => 1
 
 
+    (def scored-rules3 (score-rules {[:=> :tk :cs] 1
+                                     [:=> [:and :tk :bd] [:not :cs]] 1
+                                     [:=> :lo :bd] 1}))
+
+    (score-hypothesis scored-rules3 [:=> [:and :lo :tk] [:not :cs]])
+    (score-hypothesis scored-rules3 [:=> [:and :lo :tk] :cs])
+    (score-hypothesis scored-rules3 [:=> :bd :cs])
+    (score-hypothesis scored-rules3 [:=> :bd [:not :cs]])
+
+
  "
    ([scored-rules hypothesis]
      (->> (score-models-for-hypothesis scored-rules hypothesis)
@@ -508,26 +562,6 @@ For a given hypothesis, score each model that is consistent with it based on the
 
 ;; Query Functions
 ;; ===============
-
-(defn compile-rules
-  "
-****
-Given a map associating rules to delta-values, returns a new map containing two keys, :delta-values (which is associated with the original map) and :z+-scores (which is associated with a map containing a \"surprise\" score for each rule).
-
-This compiled-rules map can be passed to the query function as an alternative to an uncompiled rules-map.
-
-**Examples**
-
-    (def rules-map {[:=> :b :f] 1
-                    [:=> :p :b] 1
-                    [:=> :p [:not :f]] 1
-                    [:=> :b :w] 1
-                    [:=> :f :a] 1})
-
-    (compile-rules rules-map)
-
-"
-  ([rules-map]))
 
 (defn query 
   "
@@ -568,6 +602,11 @@ Given either an uncompiled or compiled rules map and a series of hypothetical mo
     (query scored-rules
            [:and :p :w]
            [:and :p [:not :w]])
+
+
+    (def scored-rules3 (score-rules {[:=> :tk :cs] 1, [:=> [:and :tk :bd] [:not :cs]] 1}))
+    (query scored-rules3 [:=> :tk [:not :bd]] [:=> :tk :bd])
+    (query scored-rules3 [:=> [:not :tk] [:not :bd]] [:=> [:not :tk] :bd])
 
 "
   ([scored-rules-map & hypotheses]
